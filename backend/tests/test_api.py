@@ -1,0 +1,542 @@
+import os
+import sys
+from datetime import datetime, timedelta
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, BASE_DIR)
+
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+if os.path.exists("test.db"):
+    os.remove("test.db")
+
+from fastapi.testclient import TestClient
+from app.main import app, seed_default_schedule
+from app.database import create_db_and_tables, engine
+from sqlmodel import Session
+
+# Ensure DB tables exist for tests
+create_db_and_tables()
+# Seed default schedule so tests have 7 records
+with Session(engine) as session:
+    seed_default_schedule(session)
+
+client = TestClient(app)
+
+
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_create_and_list_client():
+    payload = {"nombre": "Ana", "apellido": "Lopez", "telefono": "123456789"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["nombre"] == "Ana"
+
+    r2 = client.get("/clients")
+    assert r2.status_code == 200
+    assert any(c["nombre"] == "Ana" for c in r2.json())
+
+
+_test_counter: int = 0
+_BASE_TEST_DATE = datetime(2026, 7, 1, 10, 0, 0)
+
+
+def _unique_date_offset():
+    """Return a unique (days, minutes) offset for data isolation."""
+    global _test_counter
+    _test_counter += 1
+    # Each test gets its own day to avoid any cross-test overlap
+    days = _test_counter - 1
+    minutes = 0
+    return days, minutes
+
+
+def _create_test_client_and_appointment():
+    """Helper to create a test client + service + appointment and return relevant IDs.
+    Uses a unique date per call to avoid data collision across tests."""
+    days_offset, minutes_offset = _unique_date_offset()
+
+    client_payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "987654321"}
+    client_resp = client.post("/clients", json=client_payload)
+    assert client_resp.status_code == 200
+    client_id = client_resp.json()["id"]
+
+    service_payload = {
+        "nombre_servicio": "Manicura",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Manicura Spa",
+        "activo": True,
+    }
+    service_resp = client.post("/services", json=service_payload)
+    assert service_resp.status_code == 200
+    service_id = service_resp.json()["id"]
+
+    appointment_time = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appointment_time.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    appointment_id = appt_resp.json()["id"]
+    return client_id, service_id, appointment_id
+
+
+# ---- STRICT TDD: tests for extended PATCH endpoint ----
+
+
+def test_patch_negative_monto_rejected():
+    """RED 1: PATCH with negative monto_recibido_en_caja should return 422."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": -100.0},
+    )
+    assert resp.status_code == 422
+
+
+def test_patch_no_monto_backward_compat():
+    """RED 2: PATCH without monto should still work (backward compat)."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"estado_cita": "Asistido"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["estado_cita"] == "Asistido"
+
+
+def test_patch_asistido_increments_abonados():
+    """RED 3: PATCH to Asistido with monto should increment cantidad_turnos_abonados."""
+    client_id, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert resp.status_code == 200
+
+    # Check that the client's counter was incremented
+    client_resp = client.get("/clients")
+    assert client_resp.status_code == 200
+    clients = client_resp.json()
+    target = next(c for c in clients if c["id"] == client_id)
+    assert target["cantidad_turnos_abonados"] == 1
+
+
+def test_patch_asistido_no_client():
+    """RED 4: PATCH to Asistido with non-existent client should not crash."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    # Manually delete the client to simulate orphan appointment
+    from app.database import engine
+    from app.models import Cliente
+    from sqlmodel import Session
+    with Session(engine) as session:
+        # Find the client linked to this appointment
+        from app.models import Cita
+        cita = session.get(Cita, appointment_id)
+        if cita:
+            cliente = session.get(Cliente, cita.id_cliente)
+            if cliente:
+                session.delete(cliente)
+                session.commit()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert resp.status_code == 200
+
+
+def test_patch_cancelado_no_monto():
+    """RED 5: PATCH to Cancelado_Cliente without monto should work (backward compat)."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"estado_cita": "Cancelado_Cliente"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["estado_cita"] == "Cancelado_Cliente"
+
+
+def test_patch_update_datetime():
+    """EDIT-1: PATCH with fecha_hora_cita updates the appointment time."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+    new_time = "2026-07-15T15:00:00"
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"fecha_hora_cita": new_time},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "2026-07-15T15:00" in data["fecha_hora_cita"]
+
+
+def test_patch_conflicting_datetime_returns_409():
+    """EDIT-2: PATCH with fecha_hora_cita that conflicts returns 409."""
+    # Create two appointments
+    _, _, appt1_id = _create_test_client_and_appointment()
+    _, _, appt2_id = _create_test_client_and_appointment()
+
+    # Get appt1's time and try to set appt2 to same time
+    r = client.get("/appointments")
+    appt1 = next(a for a in r.json() if a["id"] == appt1_id)
+    conflict_time = appt1["fecha_hora_cita"]
+
+    resp = client.patch(
+        f"/appointments/{appt2_id}",
+        json={"fecha_hora_cita": conflict_time},
+    )
+    assert resp.status_code == 409
+
+
+def test_patch_update_servicios():
+    """EDIT-3: PATCH with servicios updates the services list."""
+    _, service_id, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"servicios": [
+            {"servicio_id": service_id, "duracion_minutos": 90, "precio_unitario": 3000.0, "subtotal": 3000.0},
+        ]},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["servicios"]) == 1
+    assert data["servicios"][0]["duracion_minutos"] == 90
+    assert data["duracion_total_minutos"] == 90
+
+
+def test_patch_verificado_manual():
+    """EDIT-4: PATCH with comprobante_verificado_manual sets the flag."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"comprobante_verificado_manual": True},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["comprobante_verificado_manual"] is True
+
+
+def test_patch_update_precios():
+    """EDIT-5: PATCH updates precio_historico_cobrado and sena_historica_pagada."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={"precio_historico_cobrado": 3000.0, "sena_historica_pagada": 1000.0},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["precio_historico_cobrado"] == 3000.0
+    assert data["sena_historica_pagada"] == 1000.0
+
+
+def test_patch_update_multiple_fields():
+    """EDIT-6: PATCH with multiple fields at once."""
+    _, _, appointment_id = _create_test_client_and_appointment()
+
+    resp = client.patch(
+        f"/appointments/{appointment_id}",
+        json={
+            "metodo_pago_sena": "Efectivo",
+            "precio_historico_cobrado": 3500.0,
+            "comprobante_verificado_manual": True,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["metodo_pago_sena"] == "Efectivo"
+    assert data["precio_historico_cobrado"] == 3500.0
+    assert data["comprobante_verificado_manual"] is True
+
+
+# ---- STRICT TDD: schedule endpoint tests (RED phase) ----
+# Tests written BEFORE implementing HorarioSemanal / ExcepcionHorario
+
+
+def test_get_weekly_schedule_returns_7_records():
+    """HOR-001: GET /schedule/weekly returns 7 records after seed."""
+    r = client.get("/schedule/weekly")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 7
+    for day in data:
+        assert "dia_semana" in day
+        assert "activo" in day
+        assert "hora_apertura" in day
+        assert "hora_cierre" in day
+
+
+def test_put_weekly_schedule_updates_records():
+    """HOR-001/008: PUT /schedule/weekly updates and validates."""
+    schedule = [
+        {"dia_semana": i, "activo": True, "hora_apertura": "09:00", "hora_cierre": "18:00"}
+        for i in range(7)
+    ]
+    schedule[0]["hora_apertura"] = "10:00"
+    schedule[0]["hora_cierre"] = "16:00"
+    r = client.put("/schedule/weekly", json=schedule)
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 7
+    domingo = next(d for d in data if d["dia_semana"] == 0)
+    assert domingo["hora_apertura"] == "10:00"
+    assert domingo["hora_cierre"] == "16:00"
+    assert domingo["activo"] is True
+
+
+def test_put_weekly_schedule_rejects_bad_hours():
+    """HOR-008: apertura >= cierre returns 422."""
+    schedule = [
+        {"dia_semana": i, "activo": True, "hora_apertura": "18:00", "hora_cierre": "09:00"}
+        for i in range(7)
+    ]
+    r = client.put("/schedule/weekly", json=schedule)
+    assert r.status_code == 422
+
+
+def test_create_and_list_exception():
+    """HOR-002/003: POST /schedule/exceptions creates exception, GET lists it."""
+    exception_payload = {
+        "fecha": "2026-12-25",
+        "cerrado": False,
+        "hora_apertura": "10:00",
+        "hora_cierre": "15:00",
+    }
+    r = client.post("/schedule/exceptions", json=exception_payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fecha"] == "2026-12-25"
+    assert data["cerrado"] is False
+
+    # GET lists exceptions
+    r2 = client.get("/schedule/exceptions")
+    assert r2.status_code == 200
+    exceptions = r2.json()
+    assert len(exceptions) >= 1
+    assert any(e["fecha"] == "2026-12-25" for e in exceptions)
+
+
+def test_create_duplicate_exception_returns_409():
+    """HOR-009: POST /schedule/exceptions with same fecha returns 409."""
+    payload = {
+        "fecha": "2026-12-31",
+        "cerrado": True,
+    }
+    r1 = client.post("/schedule/exceptions", json=payload)
+    assert r1.status_code == 200
+
+    r2 = client.post("/schedule/exceptions", json=payload)
+    assert r2.status_code == 409
+
+
+def test_delete_exception():
+    """DELETE /schedule/exceptions/{id} removes exception."""
+    payload = {
+        "fecha": "2026-11-15",
+        "cerrado": True,
+    }
+    r = client.post("/schedule/exceptions", json=payload)
+    assert r.status_code == 200
+    exc_id = r.json()["id"]
+
+    r2 = client.delete(f"/schedule/exceptions/{exc_id}")
+    assert r2.status_code == 200
+    assert r2.json() == {"ok": True}
+
+    # Verify deleted
+    r3 = client.get("/schedule/exceptions")
+    assert all(e["id"] != exc_id for e in r3.json())
+
+
+def test_delete_nonexistent_exception_returns_404():
+    """DELETE /schedule/exceptions with invalid id returns 404."""
+    r = client.delete("/schedule/exceptions/99999")
+    assert r.status_code == 404
+
+
+def test_effective_hours_uses_weekly_when_no_exception():
+    """HOR-001/004: GET /schedule/effective uses weekly when no exception."""
+    # Set up Monday active 09:00-18:00
+    schedule = [
+        {"dia_semana": i, "activo": True, "hora_apertura": "09:00", "hora_cierre": "18:00"}
+        for i in range(7)
+    ]
+    client.put("/schedule/weekly", json=schedule)
+
+    # 2026-06-22 is Monday
+    r = client.get("/schedule/effective", params={"date": "2026-06-22"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["abierto"] is True
+    assert data["hora_apertura"] == "09:00"
+    assert data["hora_cierre"] == "18:00"
+
+
+def test_effective_hours_closed_when_day_inactive():
+    """HOR-004: Sunday inactive returns closed."""
+    schedule = [
+        {"dia_semana": i, "activo": i != 0, "hora_apertura": "09:00", "hora_cierre": "18:00"}
+        for i in range(7)
+    ]
+    client.put("/schedule/weekly", json=schedule)
+
+    # 2026-06-21 is Sunday (dia_semana=0)
+    r = client.get("/schedule/effective", params={"date": "2026-06-21"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["abierto"] is False
+
+
+def test_effective_hours_with_closed_exception():
+    """HOR-003: Exception with cerrado=true overrides weekly."""
+    client.post("/schedule/exceptions", json={
+        "fecha": "2026-06-22",
+        "cerrado": True,
+    })
+    r = client.get("/schedule/effective", params={"date": "2026-06-22"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["abierto"] is False
+
+
+def test_effective_hours_with_open_exception():
+    """HOR-002: Exception with custom hours overrides weekly."""
+    # First delete any existing exception for this date
+    existing = client.get("/schedule/exceptions").json()
+    for exc in existing:
+        if exc["fecha"] == "2026-06-23":
+            client.delete(f"/schedule/exceptions/{exc['id']}")
+
+    client.post("/schedule/exceptions", json={
+        "fecha": "2026-06-23",
+        "cerrado": False,
+        "hora_apertura": "10:00",
+        "hora_cierre": "15:00",
+    })
+    r = client.get("/schedule/effective", params={"date": "2026-06-23"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["abierto"] is True
+    assert data["hora_apertura"] == "10:00"
+    assert data["hora_cierre"] == "15:00"
+
+
+def test_effective_hours_invalid_date_returns_400():
+    """HOR-007: Invalid date format returns 400."""
+    r = client.get("/schedule/effective", params={"date": "2026-99-99"})
+    assert r.status_code == 400
+
+
+def test_create_exception_with_invalid_hours_returns_422():
+    """POST /schedule/exceptions with apertura >= cierre returns 422."""
+    r = client.post("/schedule/exceptions", json={
+        "fecha": "2026-10-10",
+        "cerrado": False,
+        "hora_apertura": "18:00",
+        "hora_cierre": "09:00",
+    })
+    assert r.status_code == 422
+
+
+def test_create_exception_requires_hours_when_not_cerrado():
+    """POST /schedule/exceptions with cerrado=false but missing hours returns 422."""
+    r = client.post("/schedule/exceptions", json={
+        "fecha": "2026-10-11",
+        "cerrado": False,
+    })
+    assert r.status_code == 422
+
+
+def test_busy_slots_and_conflict_detection():
+    # Reset counter to a known position for this standalone test
+    global _test_counter
+    _test_counter = 100  # far enough to avoid collision with dynamic tests
+    days_offset, minutes_offset = _unique_date_offset()
+    # Derive the expected date string from the offset
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+    appt_date_str = appt_dt.strftime("%Y-%m-%d")
+    conflicting_time = (appt_dt + timedelta(minutes=30)).isoformat()
+
+    client_payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "987654321"}
+    client_resp = client.post("/clients", json=client_payload)
+    assert client_resp.status_code == 200
+    client_id = client_resp.json()["id"]
+
+    service_payload = {
+        "nombre_servicio": "Manicura",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Manicura Spa",
+        "activo": True,
+    }
+    service_resp = client.post("/services", json=service_payload)
+    assert service_resp.status_code == 200
+    service_id = service_resp.json()["id"]
+
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+
+    busy_resp = client.get("/busy_slots", params={"date_str": appt_date_str})
+    assert busy_resp.status_code == 200
+    busy_slots = busy_resp.json()
+    assert len(busy_slots) == 1
+
+    conflicting_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": conflicting_time,
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    conflict_resp = client.post("/appointments", json=conflicting_payload)
+    assert conflict_resp.status_code == 409
+    assert "ocupado" in conflict_resp.json()["detail"]
