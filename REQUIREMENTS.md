@@ -1,18 +1,22 @@
 # Documento de Requerimientos: Sistema de Citas para Estudio de Uñas
 
->Ultima revisión 19/06/2026
+>Última revisión: 22/06/2026
 
 ## Índice
 
+- ✅ = Implementado
+
 1. [Objetivo del Sistema](#1-objetivo-del-sistema)
 2. [Arquitectura de Vistas Públicas (Módulo de Clientas)](#2-arquitectura-de-vistas-públicas-módulo-de-clientas)
-   1. [Raíz de la Aplicación Web: Landing Page](#a-raíz-de-la-aplicación-web-landing-page)
-   2. [Flujo de Reserva Online (/reservar)](#b-flujo-de-reserva-online-reservar)
+    1. [Raíz de la Aplicación Web: Landing Page](#a-raíz-de-la-aplicación-web-landing-page)
+    2. [Flujo de Reserva Online (/reservar)](#b-flujo-de-reserva-online-reservar)
 3. [Requerimientos Funcionales: Módulo de Administración](#3-requerimientos-funcionales-módulo-de-administración)
-   1. [Gestión de Parámetros del Negocio y Redes](#a-gestión-de-parámetros-del-negocio-y-redes-abm-configuración)
-   2. [Gestión de Catálogo de Servicios](#b-gestión-de-cátalogo-de-servicios)
-   3. [Carga Manual de Citas y Buscador Predictivo](#c-carga-manual-de-citas-y-buscador-predictivo)
-   4. [Control de Agenda y Estados Visuales](#d-control-de-agenda-y-estados-visuales)
+    1. ✅ [Gestión de Parámetros del Negocio y Redes (ABM Configuración)](#a-gestión-de-parámetros-del-negocio-y-redes-abm-configuración)
+    2. [Autenticación y Seguridad](#b-autenticación-y-seguridad-de-la-manicurista)
+    3. [Gestión de Catálogo de Servicios](#c-gestión-de-cátalogo-de-servicios)
+    4. ✅ [Carga Manual de Citas y Buscador Predictivo](#d-carga-manual-de-citas-y-buscador-predictivo)
+    5. ✅ [Control de Agenda y Estados Visuales](#e-control-de-agenda-y-estados-visuales)
+    6. [Panel de Métricas y Dashboard Administrativo](#f-panel-de-métricas-y-dashboard-administrativo)
 4. [Lógica de Vencimientos, Reglas de Negocio y Mitigaciones](#4-lógica-de-vencimientos-reglas-de-negocio-y-mitigaciones)
 5. [Módulo de Notificaciones y Alertas Automáticas](#5-módulo-de-notificaciones-y-alertas-automáticas)
 6. [Estructura de la Base de Datos (Diseño en 3FN)](#6-estructura-de-la-base-de-datos-diseño-en-3fn)
@@ -73,11 +77,11 @@ Panel ABM (Alta, Baja, Modificación) de servicios con los siguientes atributos 
 *   *Nombre del Servicio, **Duración Estimada* (en bloques de 15/30 min), *Precio Total, **Monto de Seña Exigido* y *Descripción*.
 *   *Estado de Visibilidad:* Switch Activo/Inactivo para controlar su renderizado en las Cards de la Landing Page.
 
-### C. Carga Manual de Citas y Buscador Predictivo
+### D. Carga Manual de Citas y Buscador Predictivo
 *   *Registro Express:* Buscador predictivo por nombre/teléfono. Si la clienta es nueva, permite registrar su ficha en el acto.
 *   *Bloqueo de Agenda:* Al cargar la cita manual (marcando opcionalmente el estado como Confirmado o Efectivo en el Local), el sistema bloquea inmediatamente la franja horaria en la vista pública para prevenir concurrencia.
 
-### D. Control de Agenda y Estados Visuales
+### E. Control de Agenda y Estados Visuales
 Calendario administrativo interactivo organizado por código de colores según el estado transaccional de la cita:
 *   Amarillo: Pendiente de seña.
 *   Verde: Señado / Confirmado.
@@ -85,7 +89,7 @@ Calendario administrativo interactivo organizado por código de colores según e
 *   *Visibilidad Diferenciada:* La manicurista podrá ver los datos de la clienta y la información completa del turno en el panel interno. La vista pública de disponibilidad mostrará únicamente bloques "Ocupado" para los horarios ocupados, sin exponer información personal.
 *   *Botón "Marcar como Asistido":* Al finalizar el servicio presencial, la manicurista presiona este botón sobre el turno correspondiente. El sistema despliega una ventana emergente con el desglose contable (Precio Histórico - Seña Pagada = Saldo Restante a cobrar en mano) y, al confirmar, cierra la transacción sumando +1 a la asistencia de la clienta.
 
-### E. Panel de Métricas y Dashboard Administrativo
+### F. Panel de Métricas y Dashboard Administrativo
 El panel interno debe incluir un dashboard de métricas operativo que permita a la manicurista monitorear el negocio y actuar rápidamente sobre turnos críticos:
 *   *Resumen KPI Inicial:* tarjetas con valores de Tasa de Asistencia, Reservas Confirmadas, Turnos Cancelados < 48h, Ingresos por Seña Retenida, Ocupación Semanal y Clientes Reincidentes.
 *   *Filtro y Búsqueda:* filtros por fecha, estado de turno, método de pago, nombre de clienta y presencia de comprobante.
