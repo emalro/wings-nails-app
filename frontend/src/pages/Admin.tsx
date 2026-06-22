@@ -3,6 +3,7 @@ import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppo
 import CalendarView from '../components/CalendarView'
 import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
+import ManualAppointmentModal from '../components/ManualAppointmentModal'
 
 type AppointmentService = {
   servicio_id: number
@@ -62,8 +63,9 @@ export default function Admin() {
     monto_sena_actual: 0,
     descripcion: '',
   })
+  const [showManualModal, setShowManualModal] = useState(false)
 
-  const { data: appointments = [], isLoading: loading } = useAppointments()
+  const { data: appointments = [], isLoading: loading, refetch: refetchAppointments } = useAppointments()
   const { data: services = [], isLoading: serviceLoading } = useServices(showInactive)
 
   const statusMutation = useUpdateAppointmentStatus()
@@ -588,6 +590,16 @@ export default function Admin() {
           <span className="overline">Turnos</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>Agenda visual</h2>
         </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button
+            type="button"
+            className="button-primary"
+            onClick={() => setShowManualModal(true)}
+            style={{ width: 'auto', padding: '10px 20px' }}
+          >
+            Cargar Turno Manual
+          </button>
+        </div>
         <CalendarView
           appointments={appointments}
           loading={loading}
@@ -617,6 +629,14 @@ export default function Admin() {
           error={error}
         />
       )}
+
+      <ManualAppointmentModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        onAppointmentCreated={() => {
+          refetchAppointments()
+        }}
+      />
     </div>
   )
 }

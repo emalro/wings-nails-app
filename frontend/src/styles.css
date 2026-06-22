@@ -201,6 +201,38 @@ input,textarea,select{font-family:inherit}
 .empty-state{padding:32px;border:2px dashed var(--border);border-radius:var(--radius-lg);color:var(--muted);text-align:center;font-size:.95rem}
 
 /* ── Responsive ── */
+/* ── Manual Appointment Modal ── */
+.manual-modal .quick-client-form {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--primary-light, #F0E4EA);
+  border-radius: 8px;
+  border: 1.5px solid var(--primary, #7A1F4A);
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+
+.search-dropdown button:hover {
+  background: var(--primary-light, #F0E4EA);
+}
+
+.client-search-wrapper {
+  position: relative;
+}
+
 @media(max-width:900px){
   .admin-grid{grid-template-columns:1fr}
   .input-row{grid-template-columns:1fr}

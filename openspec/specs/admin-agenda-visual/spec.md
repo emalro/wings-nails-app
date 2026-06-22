@@ -21,6 +21,7 @@ El panel admin DEBE reemplazar la lista de tarjetas por un calendario visual.
   - `Asistido` → Gris con indicador de check
   - `Cancelado_Cliente` / `Cancelado_Sistema_Vencimiento` → Rojo
 - Periodos sin citas DEBEN mostrar indicador de "Sin turnos".
+- El panel admin DEBE incluir un botón "Cargar Turno Manual" sobre el calendario, junto a los controles de navegación. El botón DEBE abrir ManualAppointmentModal para carga manual de citas con búsqueda predictiva de clientas.
 
 #### Escenario: Navegación y visualización
 - DADO el admin en el panel
@@ -31,6 +32,12 @@ El panel admin DEBE reemplazar la lista de tarjetas por un calendario visual.
 - DADO que no hay citas en el mes actual
 - CUANDO el admin selecciona vista "mes"
 - THEN se muestra un indicador "Sin turnos registrados"
+
+#### Escenario: Botón abre modal de carga manual
+- DADO el admin en el panel con calendario visible
+- CUANDO hace click en "Cargar Turno Manual"
+- THEN se abre ManualAppointmentModal con buscador predictivo de clientas, selector de servicios, picker de fecha/hora y toggle de estado
+- Y el calendario permanece visible detrás del modal
 
 ### CAL-002 — Modal de Detalle de Cita
 

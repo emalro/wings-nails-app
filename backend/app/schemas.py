@@ -56,6 +56,7 @@ class CitaCreate(BaseModel):
     precio_historico_cobrado: float
     sena_historica_pagada: float
     metodo_pago_sena: Optional[str] = "Transferencia"
+    estado_cita: Optional[EstadoCita] = None
     servicios: List[CitaServicioCreate]
 
 

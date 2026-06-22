@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Index
 
 
 class EstadoCita(str, Enum):
@@ -20,6 +20,9 @@ class ClienteBase(SQLModel):
 
 
 class Cliente(ClienteBase, table=True):
+    __table_args__ = (
+        Index("idx_cliente_search", "nombre", "apellido", "telefono"),
+    )
     id: Optional[int] = Field(default=None, primary_key=True)
     fecha_creacion: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     cantidad_turnos_tomados: int = Field(default=0)

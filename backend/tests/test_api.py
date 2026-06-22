@@ -474,6 +474,171 @@ def test_create_exception_requires_hours_when_not_cerrado():
     assert r.status_code == 422
 
 
+# ---- SEARCH: tests for client search endpoint (T3.1) ----
+
+
+def test_search_clients_by_nombre():
+    """CMC-001: Search by partial nombre returns matching clients."""
+    # Create a client with a distinct name
+    payload = {"nombre": "Maria", "apellido": "Garcia", "telefono": "3415550101"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 200
+    client_id = r.json()["id"]
+
+    # Search by "mar"
+    r = client.get("/clients/search", params={"q": "mar"})
+    assert r.status_code == 200
+    data = r.json()
+    assert any(c["nombre"] == "Maria" for c in data)
+    assert len(data) <= 10
+
+
+def test_search_clients_by_telefono():
+    """CMC-001: Search by partial telefono returns matching clients."""
+    payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "3415550101"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 200
+
+    # Search by phone prefix
+    r = client.get("/clients/search", params={"q": "3415"})
+    assert r.status_code == 200
+    data = r.json()
+    assert any(c["telefono"] == "3415550101" for c in data)
+
+
+def test_search_clients_no_results():
+    """CMC-001: Search with non-matching query returns empty list."""
+    r = client.get("/clients/search", params={"q": "xyz"})
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_search_clients_short_query():
+    """CMC-001: Search with < 2 chars returns empty list."""
+    r = client.get("/clients/search", params={"q": "a"})
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_search_clients_partial_apellido():
+    """CMC-001: Search by partial apellido returns matching clients."""
+    payload = {"nombre": "Ana", "apellido": "Rodriguez", "telefono": "3416660202"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 200
+
+    r = client.get("/clients/search", params={"q": "rodr"})
+    assert r.status_code == 200
+    data = r.json()
+    assert any(c["apellido"] == "Rodriguez" for c in data)
+
+
+# ---- MANUAL CREATION: tests for estado_cita in create appointment (T3.2) ----
+
+
+def test_create_appointment_with_confirmado():
+    """CMC-002: POST with estado_cita: Confirmado creates confirmed appointment."""
+    # Use helper that creates client + service
+    client_id, service_id, _ = _new_test_client_service()
+
+    appointment_time = _BASE_TEST_DATE + timedelta(days=200, minutes=0)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appointment_time.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "estado_cita": "Confirmado",
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["estado_cita"] == "Confirmado"
+
+
+def test_create_appointment_default_pendiente():
+    """CMC-002: POST without estado_cita creates appointment with Pendiente."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    appointment_time = _BASE_TEST_DATE + timedelta(days=201, minutes=0)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appointment_time.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["estado_cita"] == "Pendiente"
+
+
+def test_create_appointment_efectivo():
+    """CMC-002: POST with metodo_pago_sena: Efectivo sets payment method."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    appointment_time = _BASE_TEST_DATE + timedelta(days=202, minutes=0)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appointment_time.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "metodo_pago_sena": "Efectivo",
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["metodo_pago_sena"] == "Efectivo"
+
+
+def _new_test_client_service():
+    """Helper to create a test client and service, return (client_id, service_id, None).
+    Avoids creating an appointment so we don't consume counter slots."""
+    global _test_counter
+    _test_counter += 1
+
+    client_payload = {"nombre": "Clara", "apellido": "Diaz", "telefono": "3417770303"}
+    client_resp = client.post("/clients", json=client_payload)
+    assert client_resp.status_code == 200
+    client_id = client_resp.json()["id"]
+
+    service_payload = {
+        "nombre_servicio": "Manicura",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Manicura Spa",
+        "activo": True,
+    }
+    service_resp = client.post("/services", json=service_payload)
+    assert service_resp.status_code == 200
+    service_id = service_resp.json()["id"]
+
+    return client_id, service_id, None
+
+
 def test_busy_slots_and_conflict_detection():
     # Reset counter to a known position for this standalone test
     global _test_counter
