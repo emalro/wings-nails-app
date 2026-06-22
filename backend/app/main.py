@@ -1,8 +1,9 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, or_
 from .database import create_db_and_tables, get_session, engine
@@ -533,3 +534,8 @@ def get_effective_hours(date: str = Query(alias="date"), session: Session = Depe
 
 # Mount static files AFTER all API routes so explicit routes take priority
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    index = Path("static/index.html")
+    return FileResponse(index)
