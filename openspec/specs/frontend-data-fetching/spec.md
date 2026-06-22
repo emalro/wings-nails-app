@@ -81,6 +81,66 @@ This section maps each existing API interaction to its new hook, confirming beha
 | `PUT /services/:id` | `Admin.tsx` | `useUpdateService` | `useMutation` |
 | `PUT /appointments/:id/status` | `Admin.tsx` | `useUpdateAppointmentStatus` | `useMutation` |
 | `PATCH /appointments/{id}` | `Admin.tsx` (via MarkAttendedModal) | `useUpdateAppointmentStatus` (extended) | `useMutation` (extended payload + `['clients']` invalidation) |
+| `GET /clients/search?q=` | `ManualAppointmentModal.tsx` | `searchClients` via `useClientSearch` | `useQuery` |
+| `POST /appointments` (extended con `estado_cita`) | `ManualAppointmentModal.tsx` | `useCreateManualAppointment` | `useMutation` |
+
+---
+
+## FE-002 — Hooks for Carga Manual de Citas
+
+**Change source**: `carga-manual-citas` (archived 2026-06-22)
+
+The following hooks and API function were added to support manual appointment creation with predictive client search.
+
+### ADDED: API function `searchClients`
+
+```typescript
+export async function searchClients(q: string): Promise<ClienteRead[]> {
+  const r = await api.get('/clients/search', { params: { q } })
+  return r.data
+}
+```
+
+- Calls `GET /clients/search?q={query}`
+- Returns `ClienteRead[]` (up to 10 results)
+- Empty array when `q.length < 2` or no matches
+
+### ADDED: Hook `useClientSearch`
+
+```typescript
+function useClientSearch(query: string): {
+  data: ClienteRead[] | undefined
+  isLoading: boolean
+  isError: boolean
+}
+```
+
+- Uses `useQuery` with `queryKey: ['clients', 'search', query]`
+- Fires only when `query.length >= 2` (leveraging `enabled`)
+- Debounce 300ms managed by the component (not the hook)
+- `staleTime: 30_000`
+
+#### Escenario: Hook solo se ejecuta con >= 2 caracteres
+- DADO `useClientSearch` con `query = "a"`
+- THEN `enabled = false` — no se dispara fetch
+- CUANDO `query` cambia a `"ma"`
+- THEN `enabled = true` — se dispara `GET /clients/search?q=ma`
+
+### ADDED: Hook `useCreateManualAppointment`
+
+```typescript
+function useCreateManualAppointment(): {
+  mutate: (payload: CitaCreateConEstado) => void
+  isPending: boolean
+  error: Error | null
+  data: CitaRead | undefined
+}
+```
+
+- Uses `useMutation` over `POST /appointments`
+- Type `CitaCreateConEstado` extends `CitaCreate` with optional `estado_cita`
+- On success: invalidates `['appointments']` AND `['busy-slots']`
+- On error (409): error is surfaced for inline display in ManualAppointmentModal
 
 ---
 

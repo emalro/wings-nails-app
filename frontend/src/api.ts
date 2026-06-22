@@ -142,3 +142,21 @@ export async function getEffectiveHours(date: string): Promise<EffectiveHoursRes
   const r = await api.get('/schedule/effective', { params: { date } })
   return r.data
 }
+
+// ── Client Search ─────────────────────────────────────────────────────
+
+export type ClienteRead = {
+  id: number
+  nombre: string
+  apellido: string
+  telefono: string
+  fecha_creacion: string
+  cantidad_turnos_tomados: number
+  cantidad_turnos_abonados: number
+  cantidad_turnos_cancelados_vencidos: number
+}
+
+export async function searchClients(q: string): Promise<ClienteRead[]> {
+  const r = await api.get('/clients/search', { params: { q } })
+  return r.data
+}

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_
 from .database import create_db_and_tables, get_session, engine
 from .models import Cliente, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
 from .schemas import ClienteCreate, ClienteRead, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
@@ -117,6 +117,18 @@ def list_clients(session: Session = Depends(get_session)):
     return results
 
 
+@app.get("/clients/search", response_model=list[ClienteRead])
+def search_clients(q: str = Query(min_length=0), session: Session = Depends(get_session)):
+    if len(q) < 2:
+        return []
+    statement = select(Cliente).where(
+        Cliente.nombre.ilike(f"%{q}%") |
+        Cliente.apellido.ilike(f"%{q}%") |
+        Cliente.telefono.ilike(f"%{q}%")
+    ).limit(10)
+    return session.exec(statement).all()
+
+
 @app.post("/services", response_model=ServicioRead)
 def create_service(service: ServicioCreate, session: Session = Depends(get_session)):
     db_service = Servicio.model_validate(service)
@@ -221,13 +233,16 @@ def create_appointment(appointment: CitaCreate, session: Session = Depends(get_s
     if conflict:
         raise HTTPException(status_code=409, detail="El horario elegido ya está ocupado. Por favor elegí otra franja.")
 
-    cita = Cita(
-        id_cliente=appointment.id_cliente,
-        fecha_hora_cita=appointment.fecha_hora_cita,
-        precio_historico_cobrado=appointment.precio_historico_cobrado,
-        sena_historica_pagada=appointment.sena_historica_pagada,
-        metodo_pago_sena=appointment.metodo_pago_sena,
-    )
+    cita_kwargs = {
+        "id_cliente": appointment.id_cliente,
+        "fecha_hora_cita": appointment.fecha_hora_cita,
+        "precio_historico_cobrado": appointment.precio_historico_cobrado,
+        "sena_historica_pagada": appointment.sena_historica_pagada,
+        "metodo_pago_sena": appointment.metodo_pago_sena,
+    }
+    if appointment.estado_cita is not None:
+        cita_kwargs["estado_cita"] = appointment.estado_cita
+    cita = Cita(**cita_kwargs)
     session.add(cita)
     session.commit()
     session.refresh(cita)
