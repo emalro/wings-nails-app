@@ -8,18 +8,18 @@ Este documento captura el historial de cambios, decisiones de diseño y consider
 ## Formato de registro de cambios
 Cada entrada de cambio debe incluir:
 - Fecha
-- Autor / agente responsable
-- Tipo de cambio (Nueva funcionalidad, Corrección, Mejora, Documentación)
+- Tipo de cambio (Nueva funcionalidad, Corrección, Mejora, Documentación, Infraestructura)
 - Descripción breve
 - Archivos afectados
 - Requisitos relacionados
 - Motivo / justificación
 - Impacto esperado
 
+> **Nota**: La autoría se determina por el historial de git. No incluir campo "Autor" en las entradas.
+
 ### Plantilla de entrada
 ```
 Fecha: 2026-06-20
-Autor: Agente
 Tipo de cambio: Nueva funcionalidad
 Descripción: Se creó AGENTS.md para definir las responsabilidades del agente y las reglas de documentación.
 Archivos afectados: AGENTS.md, DOCUMENTATION.md
@@ -49,14 +49,13 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 ## Historial de cambios
 
 ### 2026-06-20 — Inicial
-- **Autor**: Agente (SDD orchestrador)
 - **Tipo**: Documentación
 - **Descripción**: Se crearon los documentos base del proyecto: AGENTS.md, ARCHITECTURE.md, DOCUMENTATION.md, REQUIREMENTS.md, STACK.md
 - **Archivos**: AGENTS.md, ARCHITECTURE.md, DOCUMENTATION.md, REQUIREMENTS.md, STACK.md
 - **Motivo**: Establecer la estructura documental y metodología SDD desde el inicio del proyecto.
 
 ### 2026-06-20 — MVP Scaffold
-- **Autor**: Agente
+
 - **Tipo**: Nueva funcionalidad
 - **Descripción**: Implementación inicial del sistema con backend FastAPI + SQLModel + SQLite, frontend React + Vite + TypeScript.
   - Backend: CRUD completo para clientes, servicios, citas, con detección de conflictos de horario y slot de disponibilidad
@@ -66,7 +65,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: Entregar un MVP funcional para iterar sobre integraciones y UX.
 
 ### 2026-06-21 — Stack Refactor: Migración a TanStack Query
-- **Autor**: Agente
+
 - **Tipo**: Mejora
 - **Descripción**: Migración de fetch nativo a TanStack Query en el frontend:
   - Hooks tipados: useAppointments, useClients, useServices, useBusySlots, useConfig, useSchedule
@@ -78,7 +77,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Impacto**: Todos los componentes ahora usan hooks con caché, los refetch son automáticos tras mutaciones.
 
 ### 2026-06-21 — Stack Refactor: Panel de Configuración (ABM Configuración)
-- **Autor**: Agente
+
 - **Tipo**: Nueva funcionalidad
 - **Descripción**: Implementación del panel de configuración del negocio (REQUIREMENTS.md 3.A):
   - Endpoint GET/PUT /config con seed automático
@@ -89,7 +88,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: Permitir a la manicurista actualizar la información del negocio sin tocar código.
 
 ### 2026-06-22 — Control de Agenda Visual
-- **Autor**: Agente
+
 - **Tipo**: Nueva funcionalidad (SDD: proposal → spec → design → tasks → apply → verify → archive)
 - **Descripción**: Reemplazo de lista textual de turnos por calendario visual interactivo:
   - react-big-calendar con vistas day/week/month, códigos de color por estado (Amarillo=Pendiente, Verde=Confirmado, Gris=Asistido, Rojo=Cancelado)
@@ -102,7 +101,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: La manicurista necesita una vista de calendario tipo Google Calendar para gestionar turnos visualmente.
 
 ### 2026-06-22 — Gestión de Horarios de Atención
-- **Autor**: Agente
+
 - **Tipo**: Nueva funcionalidad (SDD completo)
 - **Descripción**: Sistema de gestión de horarios laborales:
   - HorarioSemanal: configuración día por día (activo, apertura, cierre) con seed defaults (Lun-Vie 9-18, Sáb 9-13, Dom cerrado)
@@ -117,7 +116,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: El calendario usaba horarios fijos 8-18; la manicurista necesita configurar su disponibilidad real.
 
 ### 2026-06-22 — Edición completa de citas desde admin
-- **Autor**: Agente
+
 - **Tipo**: Mejora
 - **Descripción**: Extensión del AppointmentModal para editar todos los campos de la cita:
   - Reprogramar fecha/hora con detección de conflictos
@@ -130,7 +129,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: El modal era solo lectura; la manicurista necesita modificar datos de citas directamente.
 
 ### 2026-06-22 — Filtro de horario laboral en calendario admin
-- **Autor**: Agente
+
 - **Tipo**: Mejora
 - **Descripción**: El calendario de gestión admin ahora respeta el horario de atención configurado:
   - CalendarView usa las props min/max de react-big-calendar calculadas desde get_effective_hours
@@ -140,14 +139,29 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: El calendario mostraba el timeline completo 00-24, cuando debería restringirse al horario laboral.
 
 ### 2026-06-22 — Bug fix: selección visual de hora
-- **Autor**: Agente
+
 - **Tipo**: Corrección
 - **Descripción**: Al seleccionar una hora específica en el calendario de reserva, el slot seleccionado no se resaltaba visualmente. Se corrigió el estado CSS del slot activo y el comportamiento del time indicator.
 - **Archivos**: frontend/src/components/Calendar.tsx
 - **Motivo**: Bug visual reportado por el usuario — la hora seleccionada no se veía marcada.
 
+### 2026-06-22 — Pipeline CI/CD con GitHub Actions
+
+- **Tipo**: Infraestructura
+- **Descripción**: Implementación de CI/CD automatizado para prevenir integración de código roto:
+  - CI workflow (`.github/workflows/ci.yml`): jobs paralelos backend-tests (pytest) + frontend-check (tsc + build) en PRs y push a main
+  - CD workflow (`.github/workflows/cd.yml`): build multi-stage Docker + push a ghcr.io en push a main
+  - Dockerfile multi-stage: node:20-alpine build frontend → python:3.11-slim sirve API + frontend estático
+  - FastAPI: StaticFiles mount en `/` con SPA fallback (`html=True`)
+  - Frontend: script `typecheck` agregado a package.json
+- **Archivos**: `.github/workflows/ci.yml`, `.github/workflows/cd.yml`, `backend/Dockerfile`, `backend/app/main.py`, `frontend/package.json`, `backend/static/.gitkeep`
+- **Requisitos**: N/A (infraestructura/tooling)
+- **SDD**: `openspec/changes/archive/2026-06-22-ci-cd-pipeline/`
+- **Motivo**: Eliminar el riesgo de mergear código que rompa tests o no compile, automatizar la publicación de imágenes Docker.
+- **Pendiente post-merge**: Abrir PR trivial para verificar CI, mergear para validar CD, configurar branch protection en GitHub.
+
 ### 2026-06-22 — Carga Manual de Citas + Buscador Predictivo
-- **Autor**: Agente
+
 - **Tipo**: Nueva funcionalidad (SDD completo: proposal → spec → design → tasks → apply → verify → archive)
 - **Descripción**: Permite a la manicurista cargar turnos manualmente desde el panel admin:
   - Backend: GET /clients/search?q= con búsqueda LIKE por nombre/apellido/teléfono (min 2 chars, max 10 resultados, índice compuesto idx_cliente_search)
@@ -175,6 +189,10 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 | Schema citas | estado_cita opcional (None = Pendiente) | Campo requerido | Zero breaking change para el flujo web existente |
 | Artefactos SDD | Híbrido (OpenSpec + Engram) | Solo Engram o solo archivos | Trazabilidad en repo + recuperación cross-session |
 | Fechas | DD/MM/AAAA + 24h en toda la app | Formato ISO por defecto | Locale argentino, la manicurista necesita su formato regional |
+| CI Jobs | Jobs paralelos (backend + frontend) | Job único secuencial | Feedback más rápido sin dependencias cruzadas |
+| CD workflow | Separado de CI (cd.yml) | Job dentro de ci.yml | Permisos distintos (packages:write) y trigger independiente |
+| Docker | Multi-stage (node build + python runtime) | Build separado + artifact passing | Autocontenido, un solo artifact, sin dependencia entre workflows |
+| Frontend serving | StaticFiles montado en `/` | nginx separado | Sin infraestructura adicional, SPA fallback automático con html=True |
 
 ---
 
@@ -191,3 +209,5 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - Admin.tsx tiene ~650 líneas — considerar extracción de componentes si sigue creciendo.
 - Sin autenticación, el panel admin es actualmente público.
 - No hay tests frontend (solo verificación TypeScript).
+- Branch protection en GitHub no está configurado — CI/CD corre pero no bloquea merges rotos.
+- La primera build Docker en CI será lenta (sin cache previo en ghcr.io).

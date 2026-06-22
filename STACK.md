@@ -17,17 +17,27 @@ Este documento describe las tecnologías y herramientas seleccionadas para el pr
 - Notas de integración
 
 ## Tecnologías principales
-- Frontend: [Nombre del framework / librería] para la interfaz pública y panel administrativo.
-- Backend: [Nombre del lenguaje / plataforma] para la lógica de negocio y las APIs.
-- Base de datos: [Nombre del sistema de almacenamiento] para persistencia de clientes, servicios y citas.
-- Almacenamiento de archivos: [Nombre de la solución] para comprobantes y medios.
-- Integraciones: [API de WhatsApp], [servicio de mapas], [servicio de correo].
+| Capa | Tecnología | Propósito |
+|------|-----------|-----------|
+| Backend | Python 3.11+ · FastAPI · SQLModel | API REST con tipado fuerte, validación Pydantic y ORM |
+| Base de datos | SQLite (dev), a definir en producción | Persistencia embedida sin servidor externo |
+| Frontend | React 18 · TypeScript 5.2 (strict) · Vite 8 | SPA con type-safe, HMR rápido y build optimizado |
+| HTTP Client | TanStack Query 5 + axios | Caché automática, refetch en mutaciones, fetching declarativo |
+| Calendario | react-big-calendar | Vista day/week/month con colores por estado de turno |
+| UI/Routing | react-router-dom 6 | Navegación SPA con layouts anidados |
+| Fechas | date-fns 4 | Manipulación liviana de fechas, locale argentino |
 
 ## Herramientas de desarrollo
-- Control de versiones: Git.
-- Gestión de dependencias: [Herramienta].
-- Pruebas: [Framework de pruebas].
-- Entorno local: [Herramienta de entorno / contenedores].
+| Herramienta | Versión | Uso |
+|------------|---------|-----|
+| Git | — | Control de versiones, feature branches desde main |
+| pip | — | Gestor de dependencias Python |
+| pytest | 7.0+ | Tests de integración backend (36 tests) |
+| npm | — | Gestor de dependencias frontend |
+| TypeScript | 5.2+ | Type-check en CI (`tsc --noEmit`) |
+| Docker | multi-stage | Imagen producción: node build + python runtime |
+| GitHub Actions | CI + CD | Automatización de tests, build y deploy |
+| GitHub Container Registry | ghcr.io | Registro de imágenes Docker
 
 ## Justificación por feature
 Para cada feature importante, documentar:
