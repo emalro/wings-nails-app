@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, or_
 from .database import create_db_and_tables, get_session, engine
 from .models import Cliente, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
@@ -528,3 +529,7 @@ def get_effective_hours(date: str = Query(alias="date"), session: Session = Depe
 
     # 3. Closed
     return EffectiveHoursResponse(abierto=False)
+
+
+# Mount static files AFTER all API routes so explicit routes take priority
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
