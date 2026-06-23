@@ -4,6 +4,7 @@ import CalendarView from '../components/CalendarView'
 import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
 import ManualAppointmentModal from '../components/ManualAppointmentModal'
+import ClientSection from '../components/ClientSection'
 
 type AppointmentService = {
   servicio_id: number
@@ -595,6 +596,12 @@ export default function Admin() {
             })}
           </ul>
         )}
+      </div>
+
+      {/* ── Clientas Section ── */}
+      <div className="admin-card" style={{ marginTop: 24 }}>
+        <h3>Clientas</h3>
+        <ClientSection />
       </div>
 
       <section style={{ marginTop: 32 }}>

@@ -37,7 +37,7 @@ class ClienteTelefono(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     id_cliente: int = Field(foreign_key="cliente.id")
     telefono: str
-    etiqueta: Optional[str] = None
+    etiqueta: Optional[str] = Field(default=None, max_length=100)
     es_principal: bool = False
 
 

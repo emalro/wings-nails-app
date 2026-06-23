@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useServices, useCreateClient, useClientSearch, useCreateManualAppointment } from '../hooks'
-import { searchClients } from '../api'
+import type { ClienteRead } from '../api'
 
 interface ManualAppointmentModalProps {
   isOpen: boolean
@@ -57,7 +57,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
-  const [selectedClient, setSelectedClient] = useState<{ id: number; nombre: string; apellido: string; telefono: string } | null>(null)
+  const [selectedClient, setSelectedClient] = useState<ClienteRead | null>(null)
   const [showQuickForm, setShowQuickForm] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
 
@@ -133,7 +133,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
     }
   }
 
-  function handleSelectClient(client: { id: number; nombre: string; apellido: string; telefono: string }) {
+  function handleSelectClient(client: ClienteRead) {
     setSelectedClient(client)
     setSearchQuery(`${client.nombre} ${client.apellido}`)
     setShowDropdown(false)
@@ -319,7 +319,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                       >
                         <strong>{client.nombre} {client.apellido}</strong>
-                        {' — '}{client.telefono}
+                        {' — '}{client.telefonos?.[0]?.telefono || ''}
                       </button>
                     ))
                   ) : debouncedQuery.length >= 2 ? (
