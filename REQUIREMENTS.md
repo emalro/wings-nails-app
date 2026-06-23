@@ -19,7 +19,7 @@
     6. [Panel de Métricas y Dashboard Administrativo](#f-panel-de-métricas-y-dashboard-administrativo)
 4. [Lógica de Vencimientos, Reglas de Negocio y Mitigaciones](#4-lógica-de-vencimientos-reglas-de-negocio-y-mitigaciones)
 5. [Módulo de Notificaciones y Alertas Automáticas](#5-módulo-de-notificaciones-y-alertas-automáticas)
-6. [Estructura de la Base de Datos (Diseño en 3FN)](#6-estructura-de-la-base-de-datos-diseño-en-3fn)
+6. ✅ [Estructura de la Base de Datos (Diseño en 3FN)](#6-estructura-de-la-base-de-datos-diseño-en-3fn)
 7. [Requerimientos No Funcionales](#7-requerimientos-no-funcionales)
 
 ## 1. Objetivo del Sistema
@@ -191,16 +191,26 @@ El sistema disparará recordatorios automatizados vía WhatsApp vinculados al ci
 
 ## 6. Estructura de la Base de Datos (Diseño en 3FN)
 
-### Entidad: Clientas
+### Entidad: Clientes
 *   id_cliente: INT (PK, Autoincremental).
 *   fecha_creacion: DATETIME.
 *   nombre: VARCHAR(50).
 *   apellido: VARCHAR(50).
-*   telefono: VARCHAR(20).
+*   dni: VARCHAR(20) (UNIQUE, identificador único del sistema).
+*   activo: BOOLEAN (por defecto TRUE; soft-delete si FALSE).
 *   cantidad_turnos_tomados: INT.
 *   cantidad_turnos_abonados: INT.
 *   cantidad_turnos_cancelados_vencidos: INT.
 *   Indicadores Dashboard: *Tasa de Asistencia* y *Alerta de Reincidencia* (Ficha en rojo si acumula 3 o más turnos caídos).
+
+### Entidad: ClienteTelefono
+*   id: INT (PK, Autoincremental).
+*   id_cliente: INT (FK → Clientes.id_cliente).
+*   telefono: VARCHAR(20) (normalizado a dígitos, indexado).
+*   etiqueta: VARCHAR(100) (opcional, texto libre, ej: "Casa", "Trabajo").
+*   es_principal: BOOLEAN (exactamente uno por cliente puede ser TRUE).
+
+Nota: El teléfono se migró de la entidad Clientes a ClienteTelefono para soporte multi-teléfono (3FN). Al crear un cliente, el primer teléfono se almacena con `es_principal=true`. La búsqueda de clientes por teléfono cruza esta tabla.
 
 ### Entidad: Servicios
 *   id_servicio: INT (PK, Autoincremental).
