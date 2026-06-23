@@ -16,13 +16,13 @@ class EstadoCita(str, Enum):
 class ClienteBase(SQLModel):
     nombre: str
     apellido: str
-    telefono: str
     dni: str = Field(unique=True)
+    activo: bool = True
 
 
 class Cliente(ClienteBase, table=True):
     __table_args__ = (
-        Index("idx_cliente_search", "nombre", "apellido", "telefono"),
+        Index("idx_cliente_search", "nombre", "apellido"),
     )
     id: Optional[int] = Field(default=None, primary_key=True)
     fecha_creacion: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -30,6 +30,15 @@ class Cliente(ClienteBase, table=True):
     cantidad_turnos_abonados: int = Field(default=0)
     cantidad_turnos_cancelados_vencidos: int = Field(default=0)
     # Relationship fields removed for simpler ORM mapping in initial prototype
+
+
+class ClienteTelefono(SQLModel, table=True):
+    __table_args__ = (Index("idx_ct_telefono", "telefono"),)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    id_cliente: int = Field(foreign_key="cliente.id")
+    telefono: str
+    etiqueta: Optional[str] = Field(default=None, max_length=100)
+    es_principal: bool = False
 
 
 class ServicioBase(SQLModel):

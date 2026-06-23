@@ -620,7 +620,9 @@ def test_create_client_normalizes_phone():
     r = client.post("/clients", json=payload)
     assert r.status_code == 201
     data = r.json()
-    assert data["telefono"] == "541112345678"
+    assert len(data["telefonos"]) == 1
+    assert data["telefonos"][0]["telefono"] == "541112345678"
+    assert data["telefonos"][0]["es_principal"] is True
 
 
 def test_find_or_create_normalized_search():
@@ -672,7 +674,7 @@ def test_search_clients_by_telefono():
     r = client.get("/clients/search", params={"q": phone[-8:]})
     assert r.status_code == 200
     data = r.json()
-    assert any(c["telefono"] == phone for c in data)
+    assert any(phone in [p["telefono"] for p in c["telefonos"]] for c in data)
 
 
 def test_search_clients_no_results():
@@ -844,6 +846,335 @@ def test_config_put_only_cbu_fields():
     assert data["cbu_alias"] == "alias.test"
     assert data["cbu_number"] == ""
     assert data["business_name"] == "Nails Studio"
+
+
+# ---- ADMIN CLIENT MANAGEMENT: Multi-phone CRUD (REQ-CLI-006) ----
+
+
+def test_get_client_with_phones():
+    """REQ-CLI-006: GET /clients/{id} returns client with telefonos array."""
+    phone = _unique_phone()
+    payload = {"nombre": "Multi", "apellido": "Phone", "dni": _unique_dni(), "telefono": phone}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 201
+    client_id = r.json()["id"]
+
+    r2 = client.get(f"/clients/{client_id}")
+    assert r2.status_code == 200
+    data = r2.json()
+    assert len(data["telefonos"]) == 1
+    assert data["telefonos"][0]["telefono"] == phone
+    assert data["telefonos"][0]["es_principal"] is True
+
+
+def test_add_phone_to_client():
+    """REQ-CLI-006: POST /clients/{id}/phones adds a phone with normalization."""
+    payload = {"nombre": "AddPhone", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+
+    r2 = client.post(f"/clients/{client_id}/phones", json={"telefono": "+54 11 5678-1234"})
+    assert r2.status_code == 201
+    data = r2.json()
+    assert data["telefono"] == "541156781234"
+    assert data["es_principal"] is False  # second phone, not principal
+
+
+def test_add_phone_with_label():
+    """REQ-CLI-010: POST with etiqueta stores it."""
+    payload = {"nombre": "Label", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+
+    r2 = client.post(f"/clients/{client_id}/phones", json={"telefono": "541111111111", "etiqueta": "Trabajo"})
+    assert r2.status_code == 201
+    assert r2.json()["etiqueta"] == "Trabajo"
+
+
+def test_add_phone_without_label():
+    """REQ-CLI-010: POST without etiqueta stores null."""
+    payload = {"nombre": "NoLabel", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+
+    r2 = client.post(f"/clients/{client_id}/phones", json={"telefono": "542222222222"})
+    assert r2.status_code == 201
+    assert r2.json()["etiqueta"] is None
+
+
+def test_update_phone_label():
+    """REQ-CLI-006: PATCH /clients/{id}/phones/{phone_id} updates label."""
+    payload = {"nombre": "UpdLabel", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    phone_id = r.json()["telefonos"][0]["id"]
+
+    r2 = client.patch(f"/clients/{client_id}/phones/{phone_id}", json={"etiqueta": "Casa"})
+    assert r2.status_code == 200
+    assert r2.json()["etiqueta"] == "Casa"
+
+
+def test_update_phone_principal_toggle():
+    """REQ-CLI-006: Setting principal on one phone unsets principal on others."""
+    payload = {"nombre": "Princ", "apellido": "Toggle", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    phone_a_id = r.json()["telefonos"][0]["id"]
+
+    # Add second phone
+    r2 = client.post(f"/clients/{client_id}/phones", json={"telefono": _unique_phone()})
+    assert r2.status_code == 201
+    phone_b_id = r2.json()["id"]
+
+    # Toggle principal to phone B
+    r3 = client.patch(f"/clients/{client_id}/phones/{phone_b_id}", json={"es_principal": True})
+    assert r3.status_code == 200
+    assert r3.json()["es_principal"] is True
+
+    # Verify phone A is no longer principal
+    r4 = client.get(f"/clients/{client_id}")
+    phones = r4.json()["telefonos"]
+    phone_a = next(p for p in phones if p["id"] == phone_a_id)
+    assert phone_a["es_principal"] is False
+
+
+def test_delete_non_principal_phone():
+    """REQ-CLI-006: DELETE /clients/{id}/phones/{phone_id} removes non-principal phone."""
+    payload = {"nombre": "DelPhone", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+
+    # Add second phone
+    r2 = client.post(f"/clients/{client_id}/phones", json={"telefono": _unique_phone()})
+    phone_b_id = r2.json()["id"]
+
+    # Delete second phone
+    r3 = client.delete(f"/clients/{client_id}/phones/{phone_b_id}")
+    assert r3.status_code == 204
+
+    # Verify gone
+    r4 = client.get(f"/clients/{client_id}")
+    assert len(r4.json()["telefonos"]) == 1
+
+
+def test_delete_last_phone_returns_422():
+    """REQ-CLI-006: Cannot delete the only remaining phone."""
+    payload = {"nombre": "LastPh", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    phone_id = r.json()["telefonos"][0]["id"]
+
+    r2 = client.delete(f"/clients/{client_id}/phones/{phone_id}")
+    assert r2.status_code == 422
+
+
+def test_delete_phone_404():
+    """DELETE phone with wrong client or phone returns 404."""
+    r = client.delete("/clients/99999/phones/99999")
+    assert r.status_code == 404
+
+
+# ---- SOFT DELETE / REACTIVATE (REQ-CLI-009) ----
+
+
+def test_soft_delete_client():
+    """REQ-CLI-009: DELETE /clients/{id} sets activo=False, returns 204."""
+    payload = {"nombre": "SoftDel", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    assert r.json()["activo"] is True
+
+    r2 = client.delete(f"/clients/{client_id}")
+    assert r2.status_code == 204
+
+    r3 = client.get(f"/clients/{client_id}")
+    assert r3.json()["activo"] is False
+
+
+def test_reactivate_client():
+    """REQ-CLI-009: POST /clients/{id}/reactivate sets activo=True."""
+    payload = {"nombre": "React", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    client.delete(f"/clients/{client_id}")
+
+    r2 = client.post(f"/clients/{client_id}/reactivate")
+    assert r2.status_code == 200
+    assert r2.json()["activo"] is True
+
+
+def test_inactive_client_hidden_by_default():
+    """REQ-CLI-009: Inactive client not in default GET /clients."""
+    payload = {"nombre": "Hidden", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    client.delete(f"/clients/{client_id}")
+
+    r2 = client.get("/clients")
+    clients = r2.json()
+    assert all(c["activo"] is True for c in clients)
+
+
+def test_inactive_client_visible_with_incluir_inactivos():
+    """REQ-CLI-009: GET /clients?incluir_inactivos=true includes inactive."""
+    payload = {"nombre": "Visible", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    client.delete(f"/clients/{client_id}")
+
+    r2 = client.get("/clients", params={"incluir_inactivos": True})
+    clients = r2.json()
+    assert any(c["id"] == client_id and c["activo"] is False for c in clients)
+
+
+def test_get_client_404():
+    """GET /clients/{id} with bad id returns 404."""
+    r = client.get("/clients/99999")
+    assert r.status_code == 404
+
+
+def test_patch_client_updates_fields():
+    """PATCH /clients/{id} updates nombre, apellido, dni."""
+    payload = {"nombre": "OldName", "apellido": "OldLast", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+
+    r2 = client.patch(f"/clients/{client_id}", json={"nombre": "NewName", "apellido": "NewLast"})
+    assert r2.status_code == 200
+    data = r2.json()
+    assert data["nombre"] == "NewName"
+    assert data["apellido"] == "NewLast"
+
+
+def test_patch_client_404():
+    """PATCH /clients/{id} with bad id returns 404."""
+    r = client.patch("/clients/99999", json={"nombre": "X"})
+    assert r.status_code == 404
+
+
+def test_delete_client_404():
+    """DELETE /clients/{id} with bad id returns 404."""
+    r = client.delete("/clients/99999")
+    assert r.status_code == 404
+
+
+def test_reactivate_client_404():
+    """POST /clients/{id}/reactivate with bad id returns 404."""
+    r = client.post("/clients/99999/reactivate")
+    assert r.status_code == 404
+
+
+# ---- FIND-OR-CREATE VIA CLIENTETELEFONO (REQ-CLI-007) ----
+
+
+def test_find_or_create_ct_phone_match():
+    """REQ-CLI-007: Phone match via ClienteTelefono returns existing with 200."""
+    phone = _unique_phone()
+    dni1 = _unique_dni()
+    dni2 = _unique_dni()
+
+    # Create first client
+    r1 = client.post("/clients", json={"nombre": "First", "apellido": "CT", "dni": dni1, "telefono": phone})
+    assert r1.status_code == 201
+    client1_id = r1.json()["id"]
+
+    # Same phone, different DNI → phone match via CT
+    r2 = client.post("/clients", json={"nombre": "Second", "apellido": "CT", "dni": dni2, "telefono": phone})
+    assert r2.status_code == 200
+    assert r2.json()["id"] == client1_id
+
+
+def test_find_or_create_dni_match_when_phone_new():
+    """REQ-CLI-007: DNI match when phone is new returns existing with 200."""
+    dni = _unique_dni()
+    phone1 = _unique_phone()
+    phone2 = _unique_phone()
+
+    # Create with phone1
+    r1 = client.post("/clients", json={"nombre": "DniCT", "apellido": "Test", "dni": dni, "telefono": phone1})
+    assert r1.status_code == 201
+    client_id = r1.json()["id"]
+
+    # Same DNI, different phone2 → DNI match
+    r2 = client.post("/clients", json={"nombre": "DniCT2", "apellido": "Test", "dni": dni, "telefono": phone2})
+    assert r2.status_code == 200
+    assert r2.json()["id"] == client_id
+
+
+# ---- SEARCH ACROSS CLIENTETELEFONO (REQ-CLI-007) ----
+
+
+def test_search_by_phone_fragment_via_ct():
+    """REQ-CLI-007: Search across ClienteTelefono finds by phone fragment."""
+    phone = _unique_phone()
+    payload = {"nombre": "SearchCT", "apellido": "Test", "dni": _unique_dni(), "telefono": phone}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 201
+
+    r2 = client.get("/clients/search", params={"q": phone[-8:]})
+    assert r2.status_code == 200
+    data = r2.json()
+    assert any(phone in [p["telefono"] for p in c["telefonos"]] for c in data)
+
+
+def test_search_incluir_inactivos_param():
+    """REQ-CLI-009: Search respects incluir_inactivos."""
+    payload = {"nombre": "SearchInact", "apellido": "Test", "dni": _unique_dni(), "telefono": _unique_phone()}
+    r = client.post("/clients", json=payload)
+    client_id = r.json()["id"]
+    client.delete(f"/clients/{client_id}")
+
+    # Without flag → not in results
+    r2 = client.get("/clients/search", params={"q": "SearchInact"})
+    assert r2.status_code == 200
+    assert not any(c["id"] == client_id for c in r2.json())
+
+    # With flag → in results
+    r3 = client.get("/clients/search", params={"q": "SearchInact", "incluir_inactivos": True})
+    assert r3.status_code == 200
+    assert any(c["id"] == client_id for c in r3.json())
+
+
+# ---- APPOINTMENT HISTORY ----
+
+
+def test_get_client_appointments():
+    """GET /clients/{id}/appointments returns appointments ordered by date desc."""
+    client_id, _, _ = _create_test_client_and_appointment()
+
+    r = client.get(f"/clients/{client_id}/appointments")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) >= 1
+    assert all(a["id_cliente"] == client_id for a in data)
+    # Verify descending order
+    dates = [a["fecha_hora_cita"] for a in data]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_get_client_appointments_404():
+    """GET /clients/{id}/appointments with bad id returns 404."""
+    r = client.get("/clients/99999/appointments")
+    assert r.status_code == 404
+
+
+# ---- LIST WITH INCLUIR_INACTIVOS (REQ-CLI-008) ----
+
+
+def test_list_clients_default_active_only():
+    """GET /clients returns only active clients by default."""
+    r = client.get("/clients")
+    assert r.status_code == 200
+    assert all(c["activo"] is True for c in r.json())
+
+
+def test_list_clients_with_incluir_inactivos():
+    """GET /clients?incluir_inactivos=true includes inactive clients."""
+    r = client.get("/clients", params={"incluir_inactivos": True})
+    assert r.status_code == 200
+    data = r.json()
+    # At least one client exists (from other tests); activo can be True or False
+    assert len(data) > 0
 
 
 def test_busy_slots_and_conflict_detection():
