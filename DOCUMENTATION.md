@@ -236,3 +236,12 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - No hay tests frontend (solo verificación TypeScript).
 - Branch protection en GitHub no está configurado — CI/CD corre pero no bloquea merges rotos.
 - La primera build Docker en CI será lenta (sin cache previo en ghcr.io).
+
+### 2026-06-23 — Fix: API URL hardcodeada a localhost en build de producción
+
+- **Tipo**: Corrección
+- **Descripción**: `VITE_API_URL` default `'http://localhost:8000'` rompía todos los llamados a la API desde prod porque el browser del usuario resuelve `localhost` a su propia máquina, no al servidor. Cambiado a `''` (URL relativa) para que el frontend use la misma origen del servidor que lo sirve.
+- **Archivos afectados**: `frontend/src/api.ts`
+- **Motivo**: En producción, FastAPI sirve tanto el SPA como la API desde el mismo origen. Usar URL absoluta a `localhost` hace que las requests nunca lleguen al backend.
+- **Impacto esperado**: Todas las operaciones del admin (crear servicios, turnos, clientas) funcionan correctamente en producción.
+- **Riesgo residual**: En desarrollo, requiere tener `VITE_API_URL` seteada en `.env` si el dev server de Vite está en otro puerto que el backend.
