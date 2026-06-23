@@ -5,10 +5,11 @@ from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session, select, or_
+from sqlmodel import Session, select
+from sqlalchemy import text
 from .database import create_db_and_tables, get_session, engine
-from .models import Cliente, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
-from .schemas import ClienteCreate, ClienteRead, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
+from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
 
 
 def seed_default_config(session: Session) -> None:
@@ -42,10 +43,35 @@ def seed_default_schedule(session: Session) -> None:
     session.commit()
 
 
+def run_migration(session: Session) -> None:
+    """Startup migration: add activo column, copy telefono to ClienteTelefono, set activo=1."""
+    # Add activo column if it doesn't exist (existing DBs)
+    try:
+        session.exec(text("ALTER TABLE cliente ADD COLUMN activo BOOLEAN NOT NULL DEFAULT 1"))
+        session.commit()
+    except Exception:
+        session.rollback()  # Column already exists — ignore
+
+    # Set activo=1 for all rows (in case they were created before the column existed)
+    session.exec(text("UPDATE cliente SET activo = 1 WHERE activo IS NULL"))
+    session.commit()
+
+    # Copy existing telefono data to ClienteTelefono only if CT table is empty
+    existing_ct = session.exec(select(ClienteTelefono)).all()
+    if len(existing_ct) == 0:
+        rows = session.exec(text("SELECT id, telefono FROM cliente WHERE telefono IS NOT NULL AND telefono != ''")).all()
+        for row in rows:
+            ct = ClienteTelefono(id_cliente=row[0], telefono=row[1], es_principal=True)
+            session.add(ct)
+        if rows:
+            session.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     create_db_and_tables()
     with Session(engine) as session:
+        run_migration(session)
         seed_default_config(session)
         seed_default_schedule(session)
     yield
@@ -103,6 +129,28 @@ def update_config(update: ConfiguracionUpdate, session: Session = Depends(get_se
     return config
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _attach_telefonos(client: Cliente, session: Session) -> dict:
+    """Build ClienteRead-compatible dict with telefonos attached (values JSON-safe)."""
+    data = client.model_dump(mode="json")
+    phones = session.exec(
+        select(ClienteTelefono)
+        .where(ClienteTelefono.id_cliente == client.id)
+        .order_by(ClienteTelefono.es_principal.desc(), ClienteTelefono.id)
+    ).all()
+    data["telefonos"] = [ClienteTelefonoRead.model_validate(p).model_dump(mode="json") for p in phones]
+    return data
+
+
+def _build_cliente_read_response(client: Cliente, session: Session) -> dict:
+    return _attach_telefonos(client, session)
+
+
+# ── Client Endpoints ─────────────────────────────────────────────────────────
+
+
 @app.post("/clients", response_model=ClienteRead)
 def create_client(client: ClienteCreate, session: Session = Depends(get_session)):
     normalized_phone = normalize_phone(client.telefono)
@@ -112,43 +160,257 @@ def create_client(client: ClienteCreate, session: Session = Depends(get_session)
         select(Cliente).where(Cliente.dni == client.dni)
     ).first()
     if existing:
-        return existing
+        return _build_cliente_read_response(existing, session)
 
-    # 2. Search by normalized phone (secondary)
-    existing = session.exec(
-        select(Cliente).where(Cliente.telefono == normalized_phone)
+    # 2. Search by normalized phone via ClienteTelefono
+    existing_phone = session.exec(
+        select(ClienteTelefono).where(ClienteTelefono.telefono == normalized_phone)
     ).first()
-    if existing:
-        return existing
+    if existing_phone:
+        client_match = session.get(Cliente, existing_phone.id_cliente)
+        if client_match:
+            return _build_cliente_read_response(client_match, session)
 
-    # 3. Create new client
-    data = client.model_dump()
-    data["telefono"] = normalized_phone
+    # 3. Create new client + primary phone
+    data = client.model_dump(exclude={"telefono"})
     db_client = Cliente(**data)
     session.add(db_client)
     session.commit()
     session.refresh(db_client)
-    return JSONResponse(status_code=201, content=ClienteRead.model_validate(db_client).model_dump(mode="json"))
+
+    ct = ClienteTelefono(
+        id_cliente=db_client.id,
+        telefono=normalized_phone,
+        es_principal=True,
+    )
+    session.add(ct)
+    session.commit()
+    session.refresh(db_client)
+
+    response_data = _build_cliente_read_response(db_client, session)
+    return JSONResponse(status_code=201, content=response_data)
 
 
 @app.get("/clients", response_model=list[ClienteRead])
-def list_clients(session: Session = Depends(get_session)):
+def list_clients(
+    incluir_inactivos: bool = False,
+    session: Session = Depends(get_session),
+):
     statement = select(Cliente)
+    if not incluir_inactivos:
+        statement = statement.where(Cliente.activo == True)
     results = session.exec(statement).all()
-    return results
+    return [_build_cliente_read_response(c, session) for c in results]
 
 
 @app.get("/clients/search", response_model=list[ClienteRead])
-def search_clients(q: str = Query(min_length=0), session: Session = Depends(get_session)):
+def search_clients(
+    q: str = Query(min_length=0),
+    incluir_inactivos: bool = False,
+    session: Session = Depends(get_session),
+):
     if len(q) < 2:
         return []
-    statement = select(Cliente).where(
-        Cliente.nombre.ilike(f"%{q}%") |
-        Cliente.apellido.ilike(f"%{q}%") |
-        Cliente.telefono.ilike(f"%{q}%") |
-        Cliente.dni.ilike(f"%{q}%")
-    ).limit(10)
-    return session.exec(statement).all()
+    # Search across Cliente fields AND ClienteTelefono.telefono
+    matching_ids: set[int] = set()
+    cliente_matches = session.exec(
+        select(Cliente).where(
+            Cliente.nombre.ilike(f"%{q}%") |
+            Cliente.apellido.ilike(f"%{q}%") |
+            Cliente.dni.ilike(f"%{q}%")
+        )
+    ).all()
+    for c in cliente_matches:
+        matching_ids.add(c.id)
+
+    phone_matches = session.exec(
+        select(ClienteTelefono).where(ClienteTelefono.telefono.ilike(f"%{q}%"))
+    ).all()
+    for p in phone_matches:
+        matching_ids.add(p.id_cliente)
+
+    if not matching_ids:
+        return []
+
+    statement = select(Cliente).where(Cliente.id.in_(matching_ids))
+    if not incluir_inactivos:
+        statement = statement.where(Cliente.activo == True)
+    statement = statement.limit(10)
+    results = session.exec(statement).all()
+    return [_build_cliente_read_response(c, session) for c in results]
+
+
+@app.get("/clients/{client_id}", response_model=ClienteRead)
+def get_client(client_id: int, session: Session = Depends(get_session)):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return _build_cliente_read_response(client, session)
+
+
+@app.patch("/clients/{client_id}", response_model=ClienteRead)
+def update_client(
+    client_id: int,
+    payload: ClienteUpdate,
+    session: Session = Depends(get_session),
+):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(client, key, value)
+    session.add(client)
+    session.commit()
+    session.refresh(client)
+    return _build_cliente_read_response(client, session)
+
+
+@app.delete("/clients/{client_id}", status_code=204)
+def delete_client(client_id: int, session: Session = Depends(get_session)):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    client.activo = False
+    session.add(client)
+    session.commit()
+
+
+@app.post("/clients/{client_id}/reactivate", response_model=ClienteRead)
+def reactivate_client(client_id: int, session: Session = Depends(get_session)):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    client.activo = True
+    session.add(client)
+    session.commit()
+    session.refresh(client)
+    return _build_cliente_read_response(client, session)
+
+
+# ── Phone Sub-resources ──────────────────────────────────────────────────────
+
+
+@app.get("/clients/{client_id}/phones", response_model=list[ClienteTelefonoRead])
+def list_client_phones(client_id: int, session: Session = Depends(get_session)):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    phones = session.exec(
+        select(ClienteTelefono)
+        .where(ClienteTelefono.id_cliente == client_id)
+        .order_by(ClienteTelefono.es_principal.desc(), ClienteTelefono.id)
+    ).all()
+    return phones
+
+
+@app.post("/clients/{client_id}/phones", response_model=ClienteTelefonoRead, status_code=201)
+def add_client_phone(
+    client_id: int,
+    payload: ClienteTelefonoCreate,
+    session: Session = Depends(get_session),
+):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    normalized = normalize_phone(payload.telefono)
+    existing_phones = session.exec(
+        select(ClienteTelefono).where(ClienteTelefono.id_cliente == client_id)
+    ).all()
+    is_first = len(existing_phones) == 0
+
+    ct = ClienteTelefono(
+        id_cliente=client_id,
+        telefono=normalized,
+        etiqueta=payload.etiqueta,
+        es_principal=is_first,
+    )
+    session.add(ct)
+    session.commit()
+    session.refresh(ct)
+    return ct
+
+
+@app.patch("/clients/{client_id}/phones/{phone_id}", response_model=ClienteTelefonoRead)
+def update_client_phone(
+    client_id: int,
+    phone_id: int,
+    payload: ClienteTelefonoUpdate,
+    session: Session = Depends(get_session),
+):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    phone = session.get(ClienteTelefono, phone_id)
+    if not phone or phone.id_cliente != client_id:
+        raise HTTPException(status_code=404, detail="Teléfono no encontrado")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    new_principal = update_data.get("es_principal")
+
+    if new_principal is True:
+        # Unset principal on all other phones for this client
+        others = session.exec(
+            select(ClienteTelefono).where(
+                ClienteTelefono.id_cliente == client_id,
+                ClienteTelefono.id != phone_id,
+            )
+        ).all()
+        for other in others:
+            other.es_principal = False
+            session.add(other)
+
+    for key, value in update_data.items():
+        setattr(phone, key, value)
+
+    session.add(phone)
+    session.commit()
+    session.refresh(phone)
+    return phone
+
+
+@app.delete("/clients/{client_id}/phones/{phone_id}", status_code=204)
+def delete_client_phone(
+    client_id: int,
+    phone_id: int,
+    session: Session = Depends(get_session),
+):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    phone = session.get(ClienteTelefono, phone_id)
+    if not phone or phone.id_cliente != client_id:
+        raise HTTPException(status_code=404, detail="Teléfono no encontrado")
+
+    # Refuse to delete the only phone
+    count = session.exec(
+        select(ClienteTelefono).where(ClienteTelefono.id_cliente == client_id)
+    ).all()
+    if len(count) <= 1:
+        raise HTTPException(
+            status_code=422,
+            detail="No se puede eliminar el único teléfono del cliente",
+        )
+
+    session.delete(phone)
+    session.commit()
+
+
+# ── Appointment History ──────────────────────────────────────────────────────
+
+
+@app.get("/clients/{client_id}/appointments", response_model=list[CitaRead])
+def get_client_appointments(client_id: int, session: Session = Depends(get_session)):
+    client = session.get(Cliente, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    citas = session.exec(
+        select(Cita)
+        .where(Cita.id_cliente == client_id)
+        .order_by(Cita.fecha_hora_cita.desc())
+    ).all()
+    return [build_cita_response(c, session) for c in citas]
 
 
 @app.post("/services", response_model=ServicioRead)

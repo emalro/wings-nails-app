@@ -29,13 +29,54 @@ class ClienteCreate(BaseModel):
         return digits
 
 
-class ClienteRead(ClienteCreate):
+class ClienteTelefonoRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    id_cliente: int
+    telefono: str
+    etiqueta: Optional[str] = None
+    es_principal: bool
+
+
+class ClienteTelefonoCreate(BaseModel):
+    telefono: str
+    etiqueta: Optional[str] = None
+
+    @field_validator("telefono")
+    @classmethod
+    def validate_telefono(cls, v: str) -> str:
+        clean = re.sub(r"[^\d\s\-\+\(\)]", "", v)
+        if clean != v:
+            raise ValueError("Teléfono: caracteres no válidos")
+        digits = normalize_phone(v)
+        if len(digits) < 7:
+            raise ValueError("Teléfono: debe tener al menos 7 dígitos")
+        return digits
+
+
+class ClienteTelefonoUpdate(BaseModel):
+    etiqueta: Optional[str] = None
+    es_principal: Optional[bool] = None
+
+
+class ClienteUpdate(BaseModel):
+    nombre: Optional[str] = None
+    apellido: Optional[str] = None
+    dni: Optional[str] = None
+
+
+class ClienteRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nombre: str
+    apellido: str
+    dni: str
+    activo: bool
     fecha_creacion: datetime
     cantidad_turnos_tomados: int
     cantidad_turnos_abonados: int
     cantidad_turnos_cancelados_vencidos: int
+    telefonos: list[ClienteTelefonoRead]
 
 
 class ServicioCreate(BaseModel):
