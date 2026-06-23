@@ -34,13 +34,13 @@ class ClienteTelefonoRead(BaseModel):
     id: int
     id_cliente: int
     telefono: str
-    etiqueta: Optional[str] = None
+    etiqueta: Optional[str] = Field(default=None, max_length=100)
     es_principal: bool
 
 
 class ClienteTelefonoCreate(BaseModel):
     telefono: str
-    etiqueta: Optional[str] = None
+    etiqueta: Optional[str] = Field(default=None, max_length=100)
 
     @field_validator("telefono")
     @classmethod
@@ -55,7 +55,7 @@ class ClienteTelefonoCreate(BaseModel):
 
 
 class ClienteTelefonoUpdate(BaseModel):
-    etiqueta: Optional[str] = None
+    etiqueta: Optional[str] = Field(default=None, max_length=100)
     es_principal: Optional[bool] = None
 
 

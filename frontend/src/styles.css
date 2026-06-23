@@ -202,6 +202,445 @@ input,textarea,select{font-family:inherit}
 .hint{color:var(--muted);font-size:.88rem}
 .empty-state{padding:32px;border:2px dashed var(--border);border-radius:var(--radius-lg);color:var(--muted);text-align:center;font-size:.95rem}
 
+/* ── Client Section ── */
+.client-section {
+  font-size: 0.9rem;
+}
+
+.client-section-layout {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.client-list-panel {
+  min-width: 0;
+}
+
+.client-search-bar {
+  margin-bottom: 0;
+}
+
+.client-search-bar input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+.client-search-bar input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.client-table-wrap {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.client-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.client-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 10px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.client-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.client-table tr:last-child td {
+  border-bottom: none;
+}
+
+.client-table .client-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.client-table .client-row:hover {
+  background: var(--primary-light);
+}
+
+.client-table .client-row.selected {
+  background: var(--primary-light);
+  font-weight: 600;
+}
+
+.client-table .phone-cell {
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+
+.client-view-btn {
+  padding: 4px 12px;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.client-view-btn:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ── Client Detail Panel ── */
+.client-detail-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  min-height: 300px;
+}
+
+.client-detail-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.client-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.client-detail-header h4 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0;
+  color: var(--text);
+}
+
+.client-status-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.client-status-badge.active {
+  background: #ECFDF5;
+  color: var(--success);
+}
+
+.client-status-badge.inactive {
+  background: #FEF2F2;
+  color: var(--danger);
+}
+
+/* ── Edit Form ── */
+.client-edit-form {
+  margin-bottom: 20px;
+}
+
+.client-edit-row {
+  margin-bottom: 12px;
+}
+
+.client-edit-row.two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.client-edit-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.client-edit-row input {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  background: var(--surface);
+  color: var(--text);
+  transition: all 0.2s;
+}
+
+.client-edit-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.client-edit-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.action-btn.small {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.action-btn.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.action-btn.danger:hover {
+  background: #FEF2F2;
+}
+
+.action-btn.reactivate {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.action-btn.reactivate:hover {
+  background: #ECFDF5;
+}
+
+.action-btn.muted {
+  opacity: 0.6;
+}
+
+/* ── Phones ── */
+.client-subsection {
+  margin-bottom: 20px;
+}
+
+.client-subsection h5 {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.client-phones-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.client-phone-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.client-phone-item:last-child {
+  border-bottom: none;
+}
+
+.client-phone-number {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.principal-indicator {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.phone-label {
+  padding: 2px 8px;
+  background: var(--primary-light);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  font-family: var(--font-body);
+}
+
+.principal-text {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.client-phone-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.phone-edit-inline {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.phone-edit-inline input {
+  padding: 4px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  width: 100px;
+}
+
+.client-add-phone {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.client-add-phone input {
+  flex: 1;
+  min-width: 120px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.client-add-phone input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.client-empty-state {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 12px 0;
+  margin: 0;
+}
+
+/* ── Appointment History ── */
+.client-appts-table-wrap {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.client-appts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.client-appts-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  padding: 8px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.client-appts-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.client-appts-table tr:last-child td {
+  border-bottom: none;
+}
+
+.appt-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.appt-status.status-asistido {
+  background: #ECFDF5;
+  color: var(--success);
+}
+
+.appt-status.status-pendiente {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.appt-status.status-confirmado {
+  background: #DBEAFE;
+  color: #1E40AF;
+}
+
+.appt-status.status-cancelado {
+  background: #FEF2F2;
+  color: var(--danger);
+}
+
+@media (max-width: 1000px) {
+  .client-section-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Responsive ── */
 /* ── Manual Appointment Modal ── */
 .manual-modal .quick-client-form {
