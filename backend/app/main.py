@@ -3,12 +3,12 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select, or_
 from .database import create_db_and_tables, get_session, engine
 from .models import Cliente, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
-from .schemas import ClienteCreate, ClienteRead, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
+from .schemas import ClienteCreate, ClienteRead, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
 
 
 def seed_default_config(session: Session) -> None:
@@ -105,11 +105,30 @@ def update_config(update: ConfiguracionUpdate, session: Session = Depends(get_se
 
 @app.post("/clients", response_model=ClienteRead)
 def create_client(client: ClienteCreate, session: Session = Depends(get_session)):
-    db_client = Cliente.model_validate(client)
+    normalized_phone = normalize_phone(client.telefono)
+
+    # 1. Search by normalized phone
+    existing = session.exec(
+        select(Cliente).where(Cliente.telefono == normalized_phone)
+    ).first()
+    if existing:
+        return existing
+
+    # 2. Search by DNI
+    existing = session.exec(
+        select(Cliente).where(Cliente.dni == client.dni)
+    ).first()
+    if existing:
+        return existing
+
+    # 3. Create new client
+    data = client.model_dump()
+    data["telefono"] = normalized_phone
+    db_client = Cliente(**data)
     session.add(db_client)
     session.commit()
     session.refresh(db_client)
-    return db_client
+    return JSONResponse(status_code=201, content=ClienteRead.model_validate(db_client).model_dump(mode="json"))
 
 
 @app.get("/clients", response_model=list[ClienteRead])
@@ -532,10 +551,15 @@ def get_effective_hours(date: str = Query(alias="date"), session: Session = Depe
     return EffectiveHoursResponse(abierto=False)
 
 
-# Mount static files AFTER all API routes so explicit routes take priority
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+# Serve built frontend assets (JS/CSS bundles with hashed names)
+app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
+
+# SPA fallback: serve index.html for all non-API, non-asset routes
+# This must come AFTER all API routes so explicit routes take priority
+@app.get("/")
+async def serve_root():
+    return FileResponse("static/index.html")
 
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    index = Path("static/index.html")
-    return FileResponse(index)
+    return FileResponse("static/index.html")

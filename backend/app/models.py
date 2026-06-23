@@ -17,6 +17,7 @@ class ClienteBase(SQLModel):
     nombre: str
     apellido: str
     telefono: str
+    dni: str = Field(unique=True)
 
 
 class Cliente(ClienteBase, table=True):
