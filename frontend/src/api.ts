@@ -143,6 +143,19 @@ export async function getEffectiveHours(date: string): Promise<EffectiveHoursRes
   return r.data
 }
 
+// ── Config Type ───────────────────────────────────────────────────────
+
+export type ConfigType = {
+  id: number
+  business_name: string
+  facebook_url: string
+  instagram_url: string
+  whatsapp_number: string
+  address: string
+  cbu_alias: string
+  cbu_number: string
+}
+
 // ── Client Search ─────────────────────────────────────────────────────
 
 export type ClienteRead = {

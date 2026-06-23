@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 22/06/2026
+> Última actualización: 23/06/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -159,6 +159,31 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **SDD**: `openspec/changes/archive/2026-06-22-ci-cd-pipeline/`
 - **Motivo**: Eliminar el riesgo de mergear código que rompa tests o no compile, automatizar la publicación de imágenes Docker.
 - **Pendiente post-merge**: Abrir PR trivial para verificar CI, mergear para validar CD, configurar branch protection en GitHub.
+
+### 2026-06-23 — Online Booking Flow Completo
+
+- **Tipo**: Nueva funcionalidad (SDD completo: proposal → spec → design → tasks → apply → verify → archive)
+- **Descripción**: Implementación del flujo completo de reserva online /reservar con 4 pasos según REQUIREMENTS.md §2.B:
+  - **REQ-BKG-001**: CBU/Alias en Configuracion (modelo, schemas, inputs en Admin.tsx)
+  - **REQ-BKG-002**: Flujo multi-step en Reservar.tsx con Step enum: servicio → datos+DNI+calendario → resumen+confirmar → pago
+  - **REQ-BKG-003**: WhatsApp deep link con template pre-redactado (nombre, fecha, servicio, seña) y fallback si número vacío
+  - **REQ-BKG-004**: Campo DNI obligatorio en paso 2, enviado a POST /clients
+  - **REQ-BKG-005**: Slots ocupados muestran "Ocupado" con mensaje de privacidad en Calendar.tsx
+- **Archivos**: backend/app/models.py, backend/app/schemas.py, backend/tests/test_api.py (+22 tests), frontend/src/pages/Reservar.tsx (refactor 4-step), frontend/src/components/Calendar.tsx, frontend/src/pages/Admin.tsx, frontend/src/api.ts
+- **Requisitos**: 2.B (Flujo de Reserva Online)
+- **SDD**: openspec/changes/archive/2026-06-23-online-booking-flow/
+- **Motivo**: REQUIREMENTS.md §2.B estaba parcialmente implementado (faltaba DNI en form, pantalla de pago, WhatsApp, labels de privacidad, manejo de errores)
+
+### 2026-06-23 — Post-SDD: Multi-servicio y feedback visual en reserva
+
+- **Tipo**: Mejora
+- **Descripción**: Correcciones post-archive del flujo de reserva online:
+  - **Multi-servicio**: `selectedService: number | null` → `selectedServices: number[]`. Toggle en grid de servicios con checkmark, resumen de cantidades y totales en paso 1, payload con todos los servicios seleccionados en POST /appointments (backend ya soportaba múltiples vía CitaServicio)
+  - **Feedback visual inline**: Sistema de validación por campo con `touched` state, errores en blur y onChange, clases CSS `.input-error` (borde rojo) y `.field-error` (texto de error debajo del input). Validaciones específicas: DNI 7-8 dígitos, teléfono ≥6 dígitos, campos obligatorios.
+  - **Mensajes de disponibilidad detallados**: Calendar.tsx diferencia entre "Local cerrado", "Cierra antes de que termine el servicio", "Todos los horarios están ocupados", y "No se pudieron cargar los horarios".
+- **Archivos**: frontend/src/pages/Reservar.tsx, frontend/src/components/Calendar.tsx, frontend/src/styles.css
+- **Requisitos**: 2.B (REQ-BKG-002 — flujo multi-step)
+- **Motivo**: El usuario reportó que se perdió la selección múltiple de servicios en el refactor a 4 pasos y faltaba feedback visual de errores en formulario y disponibilidad.
 
 ### 2026-06-22 — Carga Manual de Citas + Buscador Predictivo
 
