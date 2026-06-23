@@ -57,14 +57,19 @@ def run_migration(session: Session) -> None:
     session.commit()
 
     # Copy existing telefono data to ClienteTelefono only if CT table is empty
+    # AND the old telefono column still exists (pre-refactor DBs)
     existing_ct = session.exec(select(ClienteTelefono)).all()
     if len(existing_ct) == 0:
-        rows = session.exec(text("SELECT id, telefono FROM cliente WHERE telefono IS NOT NULL AND telefono != ''")).all()
-        for row in rows:
-            ct = ClienteTelefono(id_cliente=row[0], telefono=row[1], es_principal=True)
-            session.add(ct)
-        if rows:
-            session.commit()
+        # Check if the old telefono column exists before querying it
+        pragma = session.exec(text("PRAGMA table_info(cliente)")).all()
+        has_telefono_col = any(row[1] == "telefono" for row in pragma)
+        if has_telefono_col:
+            rows = session.exec(text("SELECT id, telefono FROM cliente WHERE telefono IS NOT NULL AND telefono != ''")).all()
+            for row in rows:
+                ct = ClienteTelefono(id_cliente=row[0], telefono=row[1], es_principal=True)
+                session.add(ct)
+            if rows:
+                session.commit()
 
 
 @asynccontextmanager
