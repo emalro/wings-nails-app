@@ -83,6 +83,8 @@ export default function Admin() {
     instagram_url: '',
     whatsapp_number: '',
     address: '',
+    cbu_alias: '',
+    cbu_number: '',
   })
   const [configMessage, setConfigMessage] = useState<string | null>(null)
 
@@ -170,6 +172,8 @@ export default function Admin() {
         instagram_url: config.instagram_url || '',
         whatsapp_number: config.whatsapp_number || '',
         address: config.address || '',
+        cbu_alias: config.cbu_alias || '',
+        cbu_number: config.cbu_number || '',
       })
     }
   }, [config])
@@ -425,6 +429,14 @@ export default function Admin() {
             <label>
               Dirección del local
               <input value={configForm.address} onChange={e => setConfigForm({ ...configForm, address: e.target.value })} placeholder="Rosario, Santa Fe" />
+            </label>
+            <label>
+              CBU / Alias
+              <input value={configForm.cbu_alias} onChange={e => setConfigForm({ ...configForm, cbu_alias: e.target.value })} placeholder="mi.alias.mp" />
+            </label>
+            <label>
+              CBU / Número
+              <input value={configForm.cbu_number} onChange={e => setConfigForm({ ...configForm, cbu_number: e.target.value })} placeholder="0000003100000000000001" />
             </label>
             <button className="button-primary" type="submit" disabled={updateConfigMutation.isPending}>
               {updateConfigMutation.isPending ? 'Guardando...' : 'Guardar configuración'}

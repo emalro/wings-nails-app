@@ -1,6 +1,6 @@
 # Documento de Requerimientos: Sistema de Citas para Estudio de Uñas
 
->Última revisión: 22/06/2026
+>Última revisión: 23/06/2026
 
 ## Índice
 
@@ -9,11 +9,11 @@
 1. [Objetivo del Sistema](#1-objetivo-del-sistema)
 2. [Arquitectura de Vistas Públicas (Módulo de Clientas)](#2-arquitectura-de-vistas-públicas-módulo-de-clientas)
     1. [Raíz de la Aplicación Web: Landing Page](#a-raíz-de-la-aplicación-web-landing-page)
-    2. [Flujo de Reserva Online (/reservar)](#b-flujo-de-reserva-online-reservar)
+     2. ✅ [Flujo de Reserva Online (/reservar)](#b-flujo-de-reserva-online-reservar)
 3. [Requerimientos Funcionales: Módulo de Administración](#3-requerimientos-funcionales-módulo-de-administración)
     1. ✅ [Gestión de Parámetros del Negocio y Redes (ABM Configuración)](#a-gestión-de-parámetros-del-negocio-y-redes-abm-configuración)
     2. [Autenticación y Seguridad](#b-autenticación-y-seguridad-de-la-manicurista)
-    3. [Gestión de Catálogo de Servicios](#c-gestión-de-cátalogo-de-servicios)
+    3. ✅ [Gestión de Catálogo de Servicios](#c-gestión-de-cátalogo-de-servicios)
     4. ✅ [Carga Manual de Citas y Buscador Predictivo](#d-carga-manual-de-citas-y-buscador-predictivo)
     5. ✅ [Control de Agenda y Estados Visuales](#e-control-de-agenda-y-estados-visuales)
     6. [Panel de Métricas y Dashboard Administrativo](#f-panel-de-métricas-y-dashboard-administrativo)
@@ -45,13 +45,31 @@ La página de inicio (/) actuará como la vitrina del negocio y estará estructu
     *   Alineado a la Izquierda: Texto con formato estricto: © — 2026 [Nombre del Emprendimiento] Rosario, Santa Fe. (El año se calcula dinámicamente según la fecha actual del sistema).
     *   Alineado a la Derecha: Accesos directos a los canales de contacto representados *únicamente por sus íconos visuales* (WhatsApp, Instagram, Facebook), sin textos adjuntos.
 
-### B. Flujo de Reserva Online (/reservar)
+### B. ✅ Flujo de Reserva Online (/reservar)
+
+#### REQ-BKG-001 — CBU/Alias en Configuración (MUST)
+El modelo `Configuracion` DEBE incluir `cbu_alias` y `cbu_number`. Los schemas `ConfiguracionUpdate` y `ConfiguracionRead` DEBEN exponerlos. El panel admin DEBE permitir visualizarlos y editarlos. Si ambos están vacíos, la pantalla de pago DEBE mostrar "Consultá por WhatsApp".
+
+#### REQ-BKG-002 — Flujo Multi-Step (MUST)
+La reserva DEBE tener 4 pasos secuenciales: (1) selección de uno o más servicios (toggle, múltiple), (2) datos del cliente (nombre, apellido, teléfono, DNI) + calendario, (3) resumen con servicios, duración total, total, seña y datos ingresados + botón "Confirmar turno", (4) pantalla de pago con CBU/Alias y monto de seña. El formulario DEBE mostrar errores de validación inline por campo (DNI, teléfono, campos obligatorios) y el calendario DEBE mostrar mensajes específicos según el motivo de indisponibilidad (cerrado, sin horario suficiente, todos ocupados).
+
 *   *Calendario Dinámico:* Selección de fecha y hora disponibles en tiempo real, calculados automáticamente según la duración del servicio elegido.
 *   *Visibilidad Pública de Turnos:* En la vista pública de disponibilidad, los horarios ocupados se muestran como bloques genéricos "Ocupado" sin datos personales de las clientas.
-*   *Formulario de Datos:* Registro rápido con Nombre, Apellido y Teléfono (WhatsApp).
-*   *Pantalla de Pago Manual:* Muestra los datos de la cuenta bancaria (CBU/Alias) y el monto de la seña requerida para ese servicio. Las reservas online solo se completan con transferencia bancaria; la opción de "Efectivo" no está disponible para nuevas clientas en el flujo web autónomo y solo puede habilitarse en registros manuales según políticas internas.
-*   *Botón de Envío de Comprobante:* Redirección con texto pre-redactado para enviar la foto del comprobante de transferencia a través de la API de WhatsApp.
+*   *Formulario de Datos:* Registro rápido con Nombre, Apellido, Teléfono (WhatsApp) y DNI.
 *   *Experiencia Pública de Reserva:* El flujo de reserva debe mostrar de forma clara el servicio seleccionado, el monto total, la seña calculada y los pasos necesarios para completar la transferencia. Debe incluir un resumen final antes de confirmar que el turno quedará en estado "Pendiente" hasta la validación del comprobante.
+
+#### REQ-BKG-003 — WhatsApp Payment Receipt (MUST)
+La pantalla de pago DEBE incluir botón WhatsApp con mensaje pre-redactado. El link DEBE abrir `https://wa.me/{whatsapp_number}` con mensaje codificado incluyendo nombre, fecha/hora, servicio y monto de seña. Si `whatsapp_number` está vacío, el botón DEBE ocultarse y mostrar texto alternativo de contacto.
+
+*   *Botón de Envío de Comprobante:* Redirección con texto pre-redactado para enviar la foto del comprobante de transferencia a través de la API de WhatsApp.
+*   *Pantalla de Pago Manual:* Muestra los datos de la cuenta bancaria (CBU/Alias) y el monto de la seña requerida para ese servicio. Las reservas online solo se completan con transferencia bancaria; la opción de "Efectivo" no está disponible para nuevas clientas en el flujo web autónomo y solo puede habilitarse en registros manuales según políticas internas.
+
+#### REQ-BKG-004 — DNI en Formulario (MUST)
+El formulario de reserva DEBE incluir campo `dni` obligatorio en paso 2. El payload a `POST /clients` DEBE incluirlo (el backend ya lo exige).
+
+#### REQ-BKG-005 — Privacy Labels (MUST)
+Los slots ocupados en el calendario público DEBEN mostrar el texto "Ocupado" en lugar de la hora. El calendario DEBE incluir un mensaje explicativo de privacidad sobre protección de datos personales.
+
 *   *Privacidad y Transparencia en el Calendario Público:* La vista pública solo debe mostrar bloques genéricos "Ocupado" o "Disponible" sin datos personales de las clientas, sin indicar nombres, servicios ni montos. Debe acompañarse de un mensaje explicativo que aclare que los horarios ocupados ya están reservados y que los datos personales se protegen por privacidad.
 *   *Accesibilidad y Mobile First:* El flujo de reserva debe ser totalmente usable en dispositivos móviles, con botones táctiles grandes, confirmaciones visibles y mensajes de error sensibles al contexto de la carga de comprobantes.
 

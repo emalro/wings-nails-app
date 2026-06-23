@@ -96,3 +96,5 @@ class Configuracion(SQLModel, table=True):
     instagram_url: str = Field(default="")
     whatsapp_number: str = Field(default="")
     address: str = Field(default="Rosario, Santa Fe")
+    cbu_alias: str = Field(default="")
+    cbu_number: str = Field(default="")

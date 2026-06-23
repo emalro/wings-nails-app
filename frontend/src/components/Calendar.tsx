@@ -143,31 +143,47 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
           <h4>⏰ Horarios disponibles - {selectedDate.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' })}</h4>
           {loadingHours ? (
             <p>Cargando horarios...</p>
-          ) : !effectiveHours?.abierto ? (
-            <p>Sin horarios disponibles para esta fecha</p>
+          ) : !effectiveHours ? (
+            <p>No se pudieron cargar los horarios.</p>
+          ) : !effectiveHours.abierto ? (
+            <p>❌ El local está cerrado este día.</p>
           ) : timeSlots.length === 0 ? (
-            <p>Sin horarios disponibles para esta fecha</p>
+            <p>❌ No hay horarios disponibles. El local cierra antes de que termine el servicio.</p>
+          ) : timeSlots.every(s => !s.available) ? (
+            <>
+              <p>⏰ Todos los horarios están ocupados para esta fecha.</p>
+              <p className="hint" style={{ marginTop: 12, fontSize: '.8rem', color: 'var(--muted)' }}>
+                Los horarios ocupados no muestran datos de otras clientas por protección de datos personales.
+              </p>
+            </>
           ) : (
-            <div className="time-slots-grid">
-              {timeSlots.map((slot, idx) => {
-                const slotDateTime = selectedDate
-                  ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}T${String(slot.hour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`
-                  : ''
-                const isSelected = slotDateTime === selectedDateTime
+            <>
+              <div className="time-slots-grid">
+                {timeSlots.map((slot, idx) => {
+                  const slotDateTime = selectedDate
+                    ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth()+1).padStart(2,'0')}-${String(selectedDate.getDate()).padStart(2,'0')}T${String(slot.hour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`
+                    : ''
+                  const isSelected = slotDateTime === selectedDateTime
 
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleTimeSelect(slot.hour, slot.minute)}
-                    className={`time-slot ${!slot.available ? 'unavailable' : ''} ${isSelected ? 'selected' : ''}`}
-                    disabled={!slot.available}
-                  >
-                    {String(slot.hour).padStart(2, '0')}:{String(slot.minute).padStart(2, '0')}
-                  </button>
-                )
-              })}
-            </div>
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleTimeSelect(slot.hour, slot.minute)}
+                      className={`time-slot ${!slot.available ? 'unavailable' : ''} ${isSelected ? 'selected' : ''}`}
+                      disabled={!slot.available}
+                    >
+                      {slot.available
+                        ? `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}`
+                        : 'Ocupado'}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="hint" style={{ marginTop: 12, fontSize: '.8rem', color: 'var(--muted)' }}>
+                Los horarios ocupados no muestran datos de otras clientas por protección de datos personales.
+              </p>
+            </>
           )}
         </div>
       )}

@@ -95,6 +95,8 @@ class ConfiguracionUpdate(BaseModel):
     instagram_url: Optional[str] = None
     whatsapp_number: Optional[str] = None
     address: Optional[str] = None
+    cbu_alias: Optional[str] = None
+    cbu_number: Optional[str] = None
 
 
 class ConfiguracionRead(BaseModel):
@@ -105,6 +107,8 @@ class ConfiguracionRead(BaseModel):
     instagram_url: str
     whatsapp_number: str
     address: str
+    cbu_alias: str
+    cbu_number: str
 
 
 class CitaServicioRead(BaseModel):

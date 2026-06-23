@@ -807,6 +807,44 @@ def _new_test_client_service():
     return client_id, service_id, None
 
 
+def test_config_persists_cbu_fields():
+    """Config model persists new cbu_alias and cbu_number fields."""
+    # GET /config returns defaults
+    r = client.get("/config")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cbu_alias"] == ""
+    assert data["cbu_number"] == ""
+
+    # PUT /config with new fields
+    payload = {"cbu_alias": "mi.alias.mp", "cbu_number": "0000003100000000000001"}
+    r = client.put("/config", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cbu_alias"] == "mi.alias.mp"
+    assert data["cbu_number"] == "0000003100000000000001"
+
+    # GET /config returns persisted values
+    r = client.get("/config")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cbu_alias"] == "mi.alias.mp"
+    assert data["cbu_number"] == "0000003100000000000001"
+
+
+def test_config_put_only_cbu_fields():
+    """PUT /config with only cbu fields preserves other fields."""
+    # Reset config first
+    client.put("/config", json={"cbu_alias": "", "cbu_number": ""})
+
+    r = client.put("/config", json={"cbu_alias": "alias.test"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cbu_alias"] == "alias.test"
+    assert data["cbu_number"] == ""
+    assert data["business_name"] == "Nails Studio"
+
+
 def test_busy_slots_and_conflict_detection():
     # Reset counter to a known position for this standalone test
     global _test_counter
