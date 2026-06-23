@@ -30,9 +30,9 @@ def test_health():
 
 
 def test_create_and_list_client():
-    payload = {"nombre": "Ana", "apellido": "Lopez", "telefono": "123456789"}
+    payload = {"nombre": "Ana", "apellido": "Lopez", "dni": _unique_dni(), "telefono": "123456789"}
     r = client.post("/clients", json=payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
     data = r.json()
     assert data["nombre"] == "Ana"
 
@@ -55,14 +55,28 @@ def _unique_date_offset():
     return days, minutes
 
 
+def _unique_dni() -> str:
+    """Return a unique DNI string for data isolation across tests."""
+    global _test_counter
+    _test_counter += 1
+    return f"{_test_counter:08d}"
+
+
+def _unique_phone() -> str:
+    """Return a unique phone string for data isolation across tests."""
+    global _test_counter
+    _test_counter += 1
+    return f"54{_test_counter:010d}"
+
+
 def _create_test_client_and_appointment():
     """Helper to create a test client + service + appointment and return relevant IDs.
     Uses a unique date per call to avoid data collision across tests."""
     days_offset, minutes_offset = _unique_date_offset()
 
-    client_payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "987654321"}
+    client_payload = {"nombre": "Lucia", "apellido": "Perez", "dni": _unique_dni(), "telefono": _unique_phone()}
     client_resp = client.post("/clients", json=client_payload)
-    assert client_resp.status_code == 200
+    assert client_resp.status_code == 201
     client_id = client_resp.json()["id"]
 
     service_payload = {
@@ -474,15 +488,168 @@ def test_create_exception_requires_hours_when_not_cerrado():
     assert r.status_code == 422
 
 
+# ---- CLIENT UNIQUENESS: tests for find-or-create (REQ-CLI-004) ----
+
+
+def test_create_new_client_returns_201():
+    """REQ-CLI-004: New client creation returns 201."""
+    payload = {"nombre": "Nueva", "apellido": "Cliente", "dni": "90000001", "telefono": "540000000001"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["nombre"] == "Nueva"
+    assert data["dni"] == "90000001"
+
+
+def test_find_or_create_phone_match_returns_200():
+    """REQ-CLI-004: Phone match returns existing client with 200."""
+    # Use unique values to avoid cross-test collisions
+    shared_phone = _unique_phone()
+    dni1 = _unique_dni()
+    dni2 = _unique_dni()
+
+    # Create first client
+    payload1 = {"nombre": "Ana", "apellido": "Phone", "dni": dni1, "telefono": shared_phone}
+    r1 = client.post("/clients", json=payload1)
+    assert r1.status_code == 201
+    client1_id = r1.json()["id"]
+
+    # Same phone, different DNI → should return existing (phone wins)
+    payload2 = {"nombre": "Ana", "apellido": "Phone", "dni": dni2, "telefono": shared_phone}
+    r2 = client.post("/clients", json=payload2)
+    assert r2.status_code == 200
+    assert r2.json()["id"] == client1_id
+
+
+def test_find_or_create_dni_match_returns_200():
+    """REQ-CLI-004: DNI match (different phone) returns existing client with 200."""
+    shared_dni = _unique_dni()
+    phone1 = _unique_phone()
+    phone2 = _unique_phone()
+
+    # Create first client
+    payload1 = {"nombre": "Beto", "apellido": "Dni", "dni": shared_dni, "telefono": phone1}
+    r1 = client.post("/clients", json=payload1)
+    assert r1.status_code == 201
+    client1_id = r1.json()["id"]
+
+    # Same DNI, different phone → DNI match returns existing
+    payload2 = {"nombre": "Beto", "apellido": "Dni", "dni": shared_dni, "telefono": phone2}
+    r2 = client.post("/clients", json=payload2)
+    assert r2.status_code == 200
+    assert r2.json()["id"] == client1_id
+
+
+def test_find_or_create_phone_priority_over_dni():
+    """REQ-CLI-004: Phone match takes priority over DNI match."""
+    phone_a = _unique_phone()
+    phone_b = _unique_phone()
+    dni_a = _unique_dni()
+    dni_b = _unique_dni()
+
+    # Client A
+    payload_a = {"nombre": "Alice", "apellido": "A", "dni": dni_a, "telefono": phone_a}
+    r_a = client.post("/clients", json=payload_a)
+    assert r_a.status_code == 201
+    client_a_id = r_a.json()["id"]
+
+    # Client B
+    payload_b = {"nombre": "Bob", "apellido": "B", "dni": dni_b, "telefono": phone_b}
+    r_b = client.post("/clients", json=payload_b)
+    assert r_b.status_code == 201
+
+    # Incoming: phone of A + DNI of B → should return A (phone wins, no duplicate)
+    payload_incoming = {"nombre": "Intruder", "apellido": "X", "dni": dni_b, "telefono": phone_a}
+    r_in = client.post("/clients", json=payload_incoming)
+    assert r_in.status_code == 200
+    assert r_in.json()["id"] == client_a_id
+
+
+# ---- CLIENT UNIQUENESS: tests for required fields (REQ-CLI-001, REQ-CLI-005) ----
+
+
+def test_create_client_missing_dni_returns_422():
+    """REQ-CLI-001: Missing dni returns 422."""
+    payload = {"nombre": "No", "apellido": "Dni", "telefono": "541111111111"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_client_missing_nombre_returns_422():
+    """REQ-CLI-005: Missing nombre returns 422."""
+    payload = {"apellido": "NoName", "dni": "91000001", "telefono": "541111111111"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_client_missing_apellido_returns_422():
+    """REQ-CLI-005: Missing apellido returns 422."""
+    payload = {"nombre": "NoApellido", "dni": "91000002", "telefono": "541111111111"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_client_missing_telefono_returns_422():
+    """REQ-CLI-005: Missing telefono returns 422."""
+    payload = {"nombre": "NoTel", "apellido": "NoTel", "dni": "91000003"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+# ---- CLIENT UNIQUENESS: tests for phone validation (REQ-CLI-002, REQ-CLI-003) ----
+
+
+def test_create_client_with_invalid_phone_returns_422():
+    """REQ-CLI-002: Letters in phone rejected with 422."""
+    payload = {"nombre": "Val", "apellido": "Test", "dni": "12345678", "telefono": "11-ABCD-5678"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_client_short_phone_returns_422():
+    """REQ-CLI-002: Fewer than 7 digits rejected with 422."""
+    payload = {"nombre": "Val", "apellido": "Test", "dni": "12345678", "telefono": "123-456"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_client_normalizes_phone():
+    """REQ-CLI-003: Phone normalizes to digits-only before storage."""
+    payload = {"nombre": "Val", "apellido": "Test", "dni": "87654321", "telefono": "+54 11 1234-5678"}
+    r = client.post("/clients", json=payload)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["telefono"] == "541112345678"
+
+
+def test_find_or_create_normalized_search():
+    """REQ-CLI-003: Search normalization — formatted phone finds stored normalized phone."""
+    raw_phone = _unique_phone()
+    formatted = f"{raw_phone[:4]}-{raw_phone[4:8]} {raw_phone[8:]}"
+    dni = _unique_dni()
+
+    # Create with clean phone
+    payload_create = {"nombre": "Busca", "apellido": "Normalizado", "dni": dni, "telefono": raw_phone}
+    r_create = client.post("/clients", json=payload_create)
+    assert r_create.status_code == 201
+    client_id = r_create.json()["id"]
+
+    # Search with formatted version of same phone (spaces/dashes/punctuation removed by normalize_phone)
+    payload_search = {"nombre": "Otro", "apellido": "Nombre", "dni": _unique_dni(), "telefono": formatted}
+    r_search = client.post("/clients", json=payload_search)
+    assert r_search.status_code == 200
+    assert r_search.json()["id"] == client_id
+
+
 # ---- SEARCH: tests for client search endpoint (T3.1) ----
 
 
 def test_search_clients_by_nombre():
     """CMC-001: Search by partial nombre returns matching clients."""
     # Create a client with a distinct name
-    payload = {"nombre": "Maria", "apellido": "Garcia", "telefono": "3415550101"}
+    payload = {"nombre": "Maria", "apellido": "Garcia", "dni": _unique_dni(), "telefono": "3415550101"}
     r = client.post("/clients", json=payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
     client_id = r.json()["id"]
 
     # Search by "mar"
@@ -495,15 +662,16 @@ def test_search_clients_by_nombre():
 
 def test_search_clients_by_telefono():
     """CMC-001: Search by partial telefono returns matching clients."""
-    payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "3415550101"}
+    phone = _unique_phone()
+    payload = {"nombre": "Lucia", "apellido": "Perez", "dni": _unique_dni(), "telefono": phone}
     r = client.post("/clients", json=payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
 
-    # Search by phone prefix
-    r = client.get("/clients/search", params={"q": "3415"})
+    # Search by phone suffix (unique portion)
+    r = client.get("/clients/search", params={"q": phone[-8:]})
     assert r.status_code == 200
     data = r.json()
-    assert any(c["telefono"] == "3415550101" for c in data)
+    assert any(c["telefono"] == phone for c in data)
 
 
 def test_search_clients_no_results():
@@ -522,9 +690,9 @@ def test_search_clients_short_query():
 
 def test_search_clients_partial_apellido():
     """CMC-001: Search by partial apellido returns matching clients."""
-    payload = {"nombre": "Ana", "apellido": "Rodriguez", "telefono": "3416660202"}
+    payload = {"nombre": "Ana", "apellido": "Rodriguez", "dni": _unique_dni(), "telefono": "3416660202"}
     r = client.post("/clients", json=payload)
-    assert r.status_code == 200
+    assert r.status_code == 201
 
     r = client.get("/clients/search", params={"q": "rodr"})
     assert r.status_code == 200
@@ -619,9 +787,9 @@ def _new_test_client_service():
     global _test_counter
     _test_counter += 1
 
-    client_payload = {"nombre": "Clara", "apellido": "Diaz", "telefono": "3417770303"}
+    client_payload = {"nombre": "Clara", "apellido": "Diaz", "dni": _unique_dni(), "telefono": _unique_phone()}
     client_resp = client.post("/clients", json=client_payload)
-    assert client_resp.status_code == 200
+    assert client_resp.status_code == 201
     client_id = client_resp.json()["id"]
 
     service_payload = {
@@ -649,9 +817,9 @@ def test_busy_slots_and_conflict_detection():
     appt_date_str = appt_dt.strftime("%Y-%m-%d")
     conflicting_time = (appt_dt + timedelta(minutes=30)).isoformat()
 
-    client_payload = {"nombre": "Lucia", "apellido": "Perez", "telefono": "987654321"}
+    client_payload = {"nombre": "Lucia", "apellido": "Perez", "dni": _unique_dni(), "telefono": _unique_phone()}
     client_resp = client.post("/clients", json=client_payload)
-    assert client_resp.status_code == 200
+    assert client_resp.status_code == 201
     client_id = client_resp.json()["id"]
 
     service_payload = {

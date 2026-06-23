@@ -1,14 +1,32 @@
 from __future__ import annotations
+import re
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .models import EstadoCita
+
+
+def normalize_phone(phone: str) -> str:
+    """Strip everything except digits. Reusable in validation AND search."""
+    return re.sub(r"\D", "", phone)
 
 
 class ClienteCreate(BaseModel):
     nombre: str
     apellido: str
+    dni: str
     telefono: str
+
+    @field_validator("telefono")
+    @classmethod
+    def validate_telefono(cls, v: str) -> str:
+        clean = re.sub(r"[^\d\s\-\+\(\)]", "", v)
+        if clean != v:
+            raise ValueError("Teléfono: caracteres no válidos")
+        digits = normalize_phone(v)
+        if len(digits) < 7:
+            raise ValueError("Teléfono: debe tener al menos 7 dígitos")
+        return digits
 
 
 class ClienteRead(ClienteCreate):
