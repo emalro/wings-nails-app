@@ -107,16 +107,16 @@ def update_config(update: ConfiguracionUpdate, session: Session = Depends(get_se
 def create_client(client: ClienteCreate, session: Session = Depends(get_session)):
     normalized_phone = normalize_phone(client.telefono)
 
-    # 1. Search by normalized phone
+    # 1. Search by DNI (primary identifier)
     existing = session.exec(
-        select(Cliente).where(Cliente.telefono == normalized_phone)
+        select(Cliente).where(Cliente.dni == client.dni)
     ).first()
     if existing:
         return existing
 
-    # 2. Search by DNI
+    # 2. Search by normalized phone (secondary)
     existing = session.exec(
-        select(Cliente).where(Cliente.dni == client.dni)
+        select(Cliente).where(Cliente.telefono == normalized_phone)
     ).first()
     if existing:
         return existing
@@ -145,7 +145,8 @@ def search_clients(q: str = Query(min_length=0), session: Session = Depends(get_
     statement = select(Cliente).where(
         Cliente.nombre.ilike(f"%{q}%") |
         Cliente.apellido.ilike(f"%{q}%") |
-        Cliente.telefono.ilike(f"%{q}%")
+        Cliente.telefono.ilike(f"%{q}%") |
+        Cliente.dni.ilike(f"%{q}%")
     ).limit(10)
     return session.exec(statement).all()
 

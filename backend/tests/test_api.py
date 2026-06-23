@@ -540,8 +540,8 @@ def test_find_or_create_dni_match_returns_200():
     assert r2.json()["id"] == client1_id
 
 
-def test_find_or_create_phone_priority_over_dni():
-    """REQ-CLI-004: Phone match takes priority over DNI match."""
+def test_find_or_create_dni_priority_over_phone():
+    """DNI match takes priority over phone match."""
     phone_a = _unique_phone()
     phone_b = _unique_phone()
     dni_a = _unique_dni()
@@ -551,18 +551,19 @@ def test_find_or_create_phone_priority_over_dni():
     payload_a = {"nombre": "Alice", "apellido": "A", "dni": dni_a, "telefono": phone_a}
     r_a = client.post("/clients", json=payload_a)
     assert r_a.status_code == 201
-    client_a_id = r_a.json()["id"]
+    client_b_id = None
 
     # Client B
     payload_b = {"nombre": "Bob", "apellido": "B", "dni": dni_b, "telefono": phone_b}
     r_b = client.post("/clients", json=payload_b)
     assert r_b.status_code == 201
+    client_b_id = r_b.json()["id"]
 
-    # Incoming: phone of A + DNI of B → should return A (phone wins, no duplicate)
+    # Incoming: phone of A + DNI of B → should return B (DNI wins)
     payload_incoming = {"nombre": "Intruder", "apellido": "X", "dni": dni_b, "telefono": phone_a}
     r_in = client.post("/clients", json=payload_incoming)
     assert r_in.status_code == 200
-    assert r_in.json()["id"] == client_a_id
+    assert r_in.json()["id"] == client_b_id
 
 
 # ---- CLIENT UNIQUENESS: tests for required fields (REQ-CLI-001, REQ-CLI-005) ----

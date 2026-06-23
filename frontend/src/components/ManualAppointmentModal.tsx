@@ -65,9 +65,10 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   const [quickNombre, setQuickNombre] = useState('')
   const [quickApellido, setQuickApellido] = useState('')
   const [quickTelefono, setQuickTelefono] = useState('')
+  const [quickDni, setQuickDni] = useState('')
 
   // Appointment state
-  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null)
+  const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([])
   const [appointmentDate, setAppointmentDate] = useState('')
   const [appointmentTime, setAppointmentTime] = useState('')
   const [estadoCita, setEstadoCita] = useState<string | null>(null) // null = default Pendiente
@@ -110,7 +111,8 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
       setQuickNombre('')
       setQuickApellido('')
       setQuickTelefono('')
-      setSelectedServiceId(null)
+      setQuickDni('')
+      setSelectedServiceIds([])
       setAppointmentDate('')
       setAppointmentTime('')
       setEstadoCita(null)
@@ -147,13 +149,14 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   }
 
   async function handleCreateQuickClient() {
-    if (!quickNombre || !quickApellido || !quickTelefono) return
+    if (!quickNombre || !quickApellido || !quickTelefono || !quickDni) return
     setError(null)
     try {
       const client = await createClientMutation.mutateAsync({
         nombre: quickNombre,
         apellido: quickApellido,
         telefono: quickTelefono,
+        dni: quickDni,
       })
       setSelectedClient(client)
       setSearchQuery(`${client.nombre} ${client.apellido}`)
@@ -166,17 +169,25 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
     }
   }
 
-  function getSelectedService() {
-    return services.find((s: any) => s.id === selectedServiceId)
+  function getSelectedServices() {
+    return services.filter((s: any) => selectedServiceIds.includes(s.id))
   }
 
   function isFormValid() {
     return (
       selectedClient &&
-      selectedServiceId &&
+      selectedServiceIds.length > 0 &&
       appointmentDate &&
       appointmentTime &&
-      getSelectedService()
+      getSelectedServices().length > 0
+    )
+  }
+
+  function toggleService(serviceId: number) {
+    setSelectedServiceIds(prev =>
+      prev.includes(serviceId)
+        ? prev.filter(id => id !== serviceId)
+        : [...prev, serviceId]
     )
   }
 
@@ -184,24 +195,25 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
     if (!isFormValid() || !selectedClient) return
     setError(null)
 
-    const service = getSelectedService()
-    if (!service) return
+    const selectedServices = getSelectedServices()
+    if (selectedServices.length === 0) return
+
+    const totalAmount = selectedServices.reduce((sum: number, s: any) => sum + s.precio_actual, 0)
+    const totalSena = selectedServices.reduce((sum: number, s: any) => sum + s.monto_sena_actual, 0)
 
     const fecha_hora_cita = `${appointmentDate}T${appointmentTime}:00`
     const payload: any = {
       id_cliente: selectedClient.id,
       fecha_hora_cita,
-      precio_historico_cobrado: service.precio_actual,
-      sena_historica_pagada: service.monto_sena_actual,
+      precio_historico_cobrado: totalAmount,
+      sena_historica_pagada: totalSena,
       metodo_pago_sena: metodoPago,
-      servicios: [
-        {
-          servicio_id: service.id,
-          duracion_minutos: service.duracion_minutos,
-          precio_unitario: service.precio_actual,
-          subtotal: service.precio_actual,
-        },
-      ],
+      servicios: selectedServices.map((s: any) => ({
+        servicio_id: s.id,
+        duracion_minutos: s.duracion_minutos,
+        precio_unitario: s.precio_actual,
+        subtotal: s.precio_actual,
+      })),
     }
     if (estadoCita) {
       payload.estado_cita = estadoCita
@@ -354,13 +366,17 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
               </div>
               <div>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Teléfono *</label>
-                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} style={inputStyle} placeholder="Teléfono" />
+                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} style={inputStyle} placeholder="3411234567" />
+              </div>
+              <div>
+                <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>DNI *</label>
+                <input value={quickDni} onChange={e => setQuickDni(e.target.value)} style={inputStyle} placeholder="12345678" />
               </div>
               <button
                 type="button"
                 className="button-primary"
                 onClick={handleCreateQuickClient}
-                disabled={!quickNombre || !quickApellido || !quickTelefono || createClientMutation.isPending}
+                disabled={!quickNombre || !quickApellido || !quickTelefono || !quickDni || createClientMutation.isPending}
                 style={{ padding: '12px 16px', fontSize: '0.9rem' }}
               >
                 {createClientMutation.isPending ? 'Creando...' : 'Guardar y seleccionar'}
@@ -369,21 +385,51 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
           </div>
         )}
 
-        {/* ── Step 2: Service Selector ── */}
+        {/* ── Step 2: Service Selector (multi) ── */}
         <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Servicio</label>
-          <select
-            value={selectedServiceId ?? ''}
-            onChange={e => setSelectedServiceId(e.target.value ? Number(e.target.value) : null)}
-            style={inputStyle}
-          >
-            <option value="">Seleccionar servicio...</option>
-            {services.map((s: any) => (
-              <option key={s.id} value={s.id}>
-                {s.nombre_servicio} — ${s.precio_actual} ({s.duracion_minutos} min)
-              </option>
-            ))}
-          </select>
+          <label style={labelStyle}>Servicios (podés elegir varios)</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {services.length === 0 ? (
+              <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>No hay servicios activos.</p>
+            ) : (
+              services.map((s: any) => {
+                const isSelected = selectedServiceIds.includes(s.id)
+                return (
+                  <label
+                    key={s.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '10px 14px',
+                      border: isSelected ? '2px solid var(--primary)' : '1.5px solid var(--border)',
+                      borderRadius: 8,
+                      background: isSelected ? 'var(--primary-light, #F0E4EA)' : 'var(--surface)',
+                      cursor: 'pointer',
+                      transition: 'all .15s',
+                      fontWeight: isSelected ? 600 : 400,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleService(s.id)}
+                      style={{ width: 18, height: 18, accentColor: 'var(--primary)' }}
+                    />
+                    <span style={{ flex: 1 }}>{s.nombre_servicio}</span>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+                      ${s.precio_actual} &middot; {s.duracion_minutos} min
+                    </span>
+                  </label>
+                )
+              })
+            )}
+          </div>
+          {selectedServiceIds.length > 0 && (
+            <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: 8 }}>
+              {selectedServiceIds.length} servicio{selectedServiceIds.length !== 1 ? 's' : ''} seleccionado{selectedServiceIds.length !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
 
         {/* ── Step 3: Date and Time ── */}
@@ -485,7 +531,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
         </div>
 
         {/* ── Summary ── */}
-        {selectedServiceId && appointmentDate && appointmentTime && selectedClient && (
+        {selectedServiceIds.length > 0 && appointmentDate && appointmentTime && selectedClient && (
           <div style={{
             marginBottom: 20,
             padding: 16,
@@ -497,12 +543,16 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
             <p style={{ margin: '4px 0' }}><strong>Clienta:</strong> {selectedClient.nombre} {selectedClient.apellido}</p>
             <p style={{ margin: '4px 0' }}><strong>Fecha:</strong> {appointmentDate} a las {appointmentTime}</p>
             {(() => {
-              const s = getSelectedService()
-              return s ? (
+              const selected = getSelectedServices()
+              const total = selected.reduce((sum: number, s: any) => sum + s.precio_actual, 0)
+              const sena = selected.reduce((sum: number, s: any) => sum + s.monto_sena_actual, 0)
+              return selected.length > 0 ? (
                 <>
-                  <p style={{ margin: '4px 0' }}><strong>Servicio:</strong> {s.nombre_servicio} ({s.duracion_minutos} min)</p>
-                  <p style={{ margin: '4px 0' }}><strong>Total:</strong> ${s.precio_actual}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Seña:</strong> ${s.monto_sena_actual} ({metodoPago})</p>
+                  {selected.map((s: any) => (
+                    <p key={s.id} style={{ margin: '2px 0' }}><strong>Servicio:</strong> {s.nombre_servicio} — ${s.precio_actual}</p>
+                  ))}
+                  <p style={{ margin: '4px 0' }}><strong>Total:</strong> ${total}</p>
+                  <p style={{ margin: '4px 0' }}><strong>Seña:</strong> ${sena} ({metodoPago})</p>
                 </>
               ) : null
             })()}
