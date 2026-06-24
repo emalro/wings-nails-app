@@ -51,11 +51,11 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: DataTable Component
 
-- [ ] 3.1 Create `frontend/src/components/DataTable.tsx` — generic `DataTable<T>` with `ColumnDef<T>[]`, client-side sort (click header toggle asc/desc), text filter, responsive card collapse ≤768px, loading skeleton, empty state, `hideOnMobile` per column
-- [ ] 3.2 Integrate DataTable in `Admin.tsx` — appointments table (date, client, service, status) above CalendarView, with status dropdown filter
-- [ ] 3.3 Integrate DataTable in `Admin.tsx` — clients table inside ClientSection section (nombre, apellido, DNI, teléfono, turnos count)
-- [ ] 3.4 Integrate DataTable in `Admin.tsx` — services table inside ServicesSection section (nombre, duración, precio, seña)
-- [ ] 3.5 Verify: `tsc --noEmit` passes
+- [x] 3.1 Create `frontend/src/components/DataTable.tsx` — generic `DataTable<T>` with `ColumnDef<T>[]`, client-side sort (click header toggle asc/desc), text filter, responsive card collapse ≤768px, loading skeleton, empty state, `hideOnMobile` per column
+- [x] 3.2 Integrate DataTable in `Admin.tsx` — appointments table (date, client, service, status) above CalendarView, with status dropdown filter
+- [x] 3.3 Integrate DataTable in `Admin.tsx` — clients table inside ClientSection section (nombre, apellido, DNI, teléfono, turnos count)
+- [x] 3.4 Integrate DataTable in `Admin.tsx` — services table inside ServicesSection section (nombre, duración, precio, seña)
+- [x] 3.5 Verify: `tsc --noEmit` passes
 
 ## Phase 4: Form Validation
 
