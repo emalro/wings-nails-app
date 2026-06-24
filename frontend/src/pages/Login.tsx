@@ -1,18 +1,39 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+
+const FLASH_MESSAGES: Record<string, { text: string; color: string }> = {
+  'auth-required': {
+    text: 'Debe iniciar sesión para acceder al panel de administración',
+    color: '#d97706',
+  },
+  'session-expired': {
+    text: 'Su sesión ha expirado. Inicie sesión nuevamente.',
+    color: '#dc2626',
+  },
+}
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [flash, setFlash] = useState<{ text: string; color: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    const reason = searchParams.get('reason')
+    if (reason && FLASH_MESSAGES[reason]) {
+      setFlash(FLASH_MESSAGES[reason])
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setFlash(null)
     setSubmitting(true)
 
     try {
@@ -30,6 +51,21 @@ export default function Login() {
   return (
     <div style={{ maxWidth: 400, margin: '4rem auto', padding: '0 1rem' }}>
       <h1 style={{ textAlign: 'center', marginBottom: '2rem' }}>Ingresar</h1>
+      {flash && (
+        <div
+          style={{
+            backgroundColor: flash.color,
+            color: '#fff',
+            padding: '0.75rem 1rem',
+            borderRadius: 6,
+            marginBottom: '1rem',
+            textAlign: 'center',
+            fontWeight: 600,
+          }}
+        >
+          {flash.text}
+        </div>
+      )}
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '1rem' }}>
           <label htmlFor="email" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
