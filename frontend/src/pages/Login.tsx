@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '../hooks/useAuth'
+import { useFormValidation } from '../hooks/useFormValidation'
+import FieldError from '../components/FieldError'
 
 const FLASH_MESSAGES: Record<string, { text: string; color: string }> = {
   'auth-required': {
@@ -13,14 +15,31 @@ const FLASH_MESSAGES: Record<string, { text: string; color: string }> = {
   },
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<{ text: string; color: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
+
+  const form = useFormValidation({
+    email: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El email es requerido' },
+        { validate: (v: string) => EMAIL_RE.test(v.trim()), message: 'Formato de email inválido' },
+      ],
+    },
+    password: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'La contraseña es requerida' },
+        { validate: (v: string) => v.trim().length >= 6, message: 'Mínimo 6 caracteres' },
+      ],
+    },
+  })
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -32,12 +51,13 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!form.validate()) return
     setError(null)
     setFlash(null)
     setSubmitting(true)
 
     try {
-      await login(email, password)
+      await login(form.values.email.trim(), form.values.password)
       navigate({ to: '/admin' })
     } catch (err: unknown) {
       const message =
@@ -74,12 +94,13 @@ export default function Login() {
           <input
             id="email"
             type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            value={form.values.email}
+            onChange={(e) => form.setField('email', e.target.value)}
             autoComplete="username"
+            className={form.touched.email && form.errors.email ? 'input-error' : ''}
             style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc' }}
           />
+          <FieldError name="email" errors={form.errors} touched={form.touched} />
         </div>
         <div style={{ marginBottom: '1rem' }}>
           <label htmlFor="password" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
@@ -88,12 +109,13 @@ export default function Login() {
           <input
             id="password"
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            value={form.values.password}
+            onChange={(e) => form.setField('password', e.target.value)}
             autoComplete="current-password"
+            className={form.touched.password && form.errors.password ? 'input-error' : ''}
             style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc' }}
           />
+          <FieldError name="password" errors={form.errors} touched={form.touched} />
         </div>
         {error && (
           <div style={{ color: '#dc2626', marginBottom: '1rem', textAlign: 'center' }}>
@@ -102,7 +124,7 @@ export default function Login() {
         )}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !form.isValid || !form.isDirty}
           className="navbar-cta"
           style={{ width: '100%', textAlign: 'center' }}
         >
