@@ -1,5 +1,5 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { useServices, useConfig } from '../hooks'
 
 type Service = {
@@ -26,7 +26,7 @@ export default function Home() {
           manicuría y nail design en un ambiente pensado para vos.
         </p>
         <div className="hero-actions">
-          <button className="hero-btn-primary" onClick={() => navigate('/reservar')}>
+          <button className="hero-btn-primary" onClick={() => navigate({ to: '/reservar' })}>
             Reservá tu turno
           </button>
         </div>
@@ -67,7 +67,7 @@ export default function Home() {
       <section className="cta-section">
         <h2>¿Necesitás hacerte las uñas?</h2>
         <p>Agendá tu turno online y asegurá tu lugar. Elegí día, horario y servicio sin moverte de tu casa.</p>
-        <button className="cta-btn" onClick={() => navigate('/reservar')}>
+        <button className="cta-btn" onClick={() => navigate({ to: '/reservar' })}>
           Reservar Turno
         </button>
       </section>

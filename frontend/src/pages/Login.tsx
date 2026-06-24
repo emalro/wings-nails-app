@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '../hooks/useAuth'
 
 const FLASH_MESSAGES: Record<string, { text: string; color: string }> = {
@@ -21,14 +21,14 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    const reason = searchParams.get('reason')
+    const params = new URLSearchParams(window.location.search)
+    const reason = params.get('reason')
     if (reason && FLASH_MESSAGES[reason]) {
       setFlash(FLASH_MESSAGES[reason])
     }
-  }, [searchParams])
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +38,7 @@ export default function Login() {
 
     try {
       await login(email, password)
-      navigate('/admin')
+      navigate({ to: '/admin' })
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Credenciales inválidas'
