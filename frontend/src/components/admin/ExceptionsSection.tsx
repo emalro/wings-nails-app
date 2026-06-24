@@ -48,7 +48,7 @@ export default function ExceptionsSection({
   handleDeleteException,
 }: ExceptionsSectionProps) {
   return (
-    <div className="admin-card" style={{ marginTop: 16 }}>
+    <>
       <h3>Excepciones</h3>
       {exceptionMessage && <div className="status-notice success">{exceptionMessage}</div>}
 
@@ -122,6 +122,6 @@ export default function ExceptionsSection({
           })}
         </ul>
       )}
-    </div>
+    </>
   )
 }

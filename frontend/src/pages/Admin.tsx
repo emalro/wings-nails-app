@@ -298,62 +298,6 @@ export default function Admin() {
 
       {error && <div className="status-notice error">{error}</div>}
 
-      <ServicesSection
-        showInactive={showInactive}
-        setShowInactive={setShowInactive}
-        services={services}
-        serviceLoading={serviceLoading}
-        servicePayload={servicePayload}
-        setServicePayload={setServicePayload}
-        editingServiceId={editingServiceId}
-        setEditingServiceId={setEditingServiceId}
-        editingServicePayload={editingServicePayload}
-        setEditingServicePayload={setEditingServicePayload}
-        serviceMessage={serviceMessage}
-        createServiceMutation={createServiceMutation}
-        updateServiceMutation={updateServiceMutation}
-        handleCreateService={handleCreateService}
-        startEditingService={startEditingService}
-        handleUpdateService={handleUpdateService}
-        handleToggleServiceActive={handleToggleServiceActive}
-        handleDeleteService={handleDeleteService}
-      />
-
-      <BusinessConfigSection
-        configForm={configForm}
-        setConfigForm={setConfigForm}
-        configLoading={configLoading}
-        updateConfigMutation={updateConfigMutation}
-        configMessage={configMessage}
-        handleUpdateConfig={handleUpdateConfig}
-      />
-
-      <ScheduleSection
-        scheduleForm={scheduleForm}
-        setScheduleForm={setScheduleForm}
-        weeklyLoading={weeklyLoading}
-        updateWeeklyMutation={updateWeeklyMutation}
-        scheduleMessage={scheduleMessage}
-        handleSaveWeekly={handleSaveWeekly}
-      />
-
-      <ExceptionsSection
-        exceptionDate={exceptionDate}
-        setExceptionDate={setExceptionDate}
-        exceptionCerrado={exceptionCerrado}
-        setExceptionCerrado={setExceptionCerrado}
-        exceptionApertura={exceptionApertura}
-        setExceptionApertura={setExceptionApertura}
-        exceptionCierre={exceptionCierre}
-        setExceptionCierre={setExceptionCierre}
-        exceptionMessage={exceptionMessage}
-        exceptionsLoading={exceptionsLoading}
-        exceptions={exceptions}
-        createExceptionMutation={createExceptionMutation}
-        handleAddException={handleAddException}
-        handleDeleteException={handleDeleteException}
-      />
-
       {/* ── AGENDA ── */}
       <section style={{ marginTop: 32 }}>
         <div className="section-header" style={{ textAlign: 'left' }}>
@@ -376,6 +320,98 @@ export default function Admin() {
           onEventClick={handleEventClick}
         />
       </section>
+
+      {/* ── HORARIOS ── */}
+      <details open className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+        <summary>
+          Horarios de Atención
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <ScheduleSection
+            scheduleForm={scheduleForm}
+            setScheduleForm={setScheduleForm}
+            weeklyLoading={weeklyLoading}
+            updateWeeklyMutation={updateWeeklyMutation}
+            scheduleMessage={scheduleMessage}
+            handleSaveWeekly={handleSaveWeekly}
+          />
+        </div>
+      </details>
+
+      {/* ── EXCEPCIONES ── */}
+      <details className="admin-card collapsible-card" style={{ marginTop: 16 }}>
+        <summary>
+          Excepciones
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <ExceptionsSection
+            exceptionDate={exceptionDate}
+            setExceptionDate={setExceptionDate}
+            exceptionCerrado={exceptionCerrado}
+            setExceptionCerrado={setExceptionCerrado}
+            exceptionApertura={exceptionApertura}
+            setExceptionApertura={setExceptionApertura}
+            exceptionCierre={exceptionCierre}
+            setExceptionCierre={setExceptionCierre}
+            exceptionMessage={exceptionMessage}
+            exceptionsLoading={exceptionsLoading}
+            exceptions={exceptions}
+            createExceptionMutation={createExceptionMutation}
+            handleAddException={handleAddException}
+            handleDeleteException={handleDeleteException}
+          />
+        </div>
+      </details>
+
+      {/* ── CONFIGURACIÓN DEL NEGOCIO ── */}
+      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+        <summary>
+          Configuración del negocio
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <BusinessConfigSection
+            configForm={configForm}
+            setConfigForm={setConfigForm}
+            configLoading={configLoading}
+            updateConfigMutation={updateConfigMutation}
+            configMessage={configMessage}
+            handleUpdateConfig={handleUpdateConfig}
+          />
+        </div>
+      </details>
+
+      {/* ── SERVICIOS ── */}
+      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+        <summary>
+          Servicios
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <ServicesSection
+            showInactive={showInactive}
+            setShowInactive={setShowInactive}
+            services={services}
+            serviceLoading={serviceLoading}
+            servicePayload={servicePayload}
+            setServicePayload={setServicePayload}
+            editingServiceId={editingServiceId}
+            setEditingServiceId={setEditingServiceId}
+            editingServicePayload={editingServicePayload}
+            setEditingServicePayload={setEditingServicePayload}
+            serviceMessage={serviceMessage}
+            createServiceMutation={createServiceMutation}
+            updateServiceMutation={updateServiceMutation}
+            handleCreateService={handleCreateService}
+            startEditingService={startEditingService}
+            handleUpdateService={handleUpdateService}
+            handleToggleServiceActive={handleToggleServiceActive}
+            handleDeleteService={handleDeleteService}
+          />
+        </div>
+      </details>
 
       {/* ── MODALES ── */}
       {selectedCita && !showAttendedModal && (
