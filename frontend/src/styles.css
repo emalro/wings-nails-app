@@ -143,6 +143,16 @@ input,textarea,select{font-family:inherit}
 .service-form input:focus,.service-form textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
 .service-form textarea{min-height:90px;resize:vertical}
 
+/* ── Collapsible admin cards ── */
+.collapsible-card{transition:box-shadow .2s}
+.collapsible-card>summary{cursor:pointer;list-style:none;font-family:var(--font-display);font-size:1.15rem;font-weight:600;padding:0;margin:0;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.collapsible-card>summary::-webkit-details-marker{display:none}
+.collapsible-card>summary::marker{display:none;content:''}
+.collapsible-card>summary .chevron{display:inline-block;transition:transform .2s ease;font-size:.75rem;flex-shrink:0}
+.collapsible-card[open]>summary .chevron{transform:rotate(90deg)}
+.collapsible-card>summary:hover{color:var(--primary)}
+.collapsible-card>.collapsible-body{margin-top:20px}
+
 .service-list-admin{list-style:none;margin:0;padding:0}
 .service-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)}
 .service-row:last-child{border-bottom:none}
