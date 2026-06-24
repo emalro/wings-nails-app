@@ -28,7 +28,7 @@ export default function BusinessConfigSection({
   handleUpdateConfig,
 }: BusinessConfigSectionProps) {
   return (
-    <div className="admin-card" style={{ marginTop: 24 }}>
+    <>
       <h3>Configuración del negocio</h3>
       {configMessage && <div className="status-notice success">{configMessage}</div>}
       {configLoading ? (
@@ -68,6 +68,6 @@ export default function BusinessConfigSection({
           </button>
         </form>
       )}
-    </div>
+    </>
   )
 }

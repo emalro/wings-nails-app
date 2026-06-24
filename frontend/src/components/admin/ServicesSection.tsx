@@ -61,7 +61,7 @@ export default function ServicesSection({
 }: ServicesSectionProps) {
   return (
     <div className="admin-grid">
-      <div className="admin-card">
+      <div>
         <h3>Crear servicio</h3>
         {serviceMessage && <div className="status-notice success">{serviceMessage}</div>}
         <form onSubmit={handleCreateService} className="service-form">
@@ -91,7 +91,7 @@ export default function ServicesSection({
         </form>
       </div>
 
-      <div className="admin-card">
+      <div>
         <h3>Servicios</h3>
         <label className="checkbox-row">
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />

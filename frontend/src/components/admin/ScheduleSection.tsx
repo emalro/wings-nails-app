@@ -27,7 +27,7 @@ export default function ScheduleSection({
   handleSaveWeekly,
 }: ScheduleSectionProps) {
   return (
-    <div className="admin-card" style={{ marginTop: 24 }}>
+    <>
       <h3>Horarios de Atención</h3>
       {scheduleMessage && <div className="status-notice success">{scheduleMessage}</div>}
 
@@ -100,6 +100,6 @@ export default function ScheduleSection({
       >
         {updateWeeklyMutation.isPending ? 'Guardando...' : 'Guardar horario semanal'}
       </button>
-    </div>
+    </>
   )
 }
