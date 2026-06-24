@@ -107,3 +107,12 @@ class Configuracion(SQLModel, table=True):
     address: str = Field(default="Rosario, Santa Fe")
     cbu_alias: str = Field(default="")
     cbu_number: str = Field(default="")
+
+
+class Usuario(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    role: str = Field(default="admin")
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

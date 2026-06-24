@@ -12,7 +12,7 @@ engine = create_engine(DATABASE_URL, echo=False, connect_args=connect_args)
 
 
 def create_db_and_tables():
-    from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, HorarioSemanal, ExcepcionHorario
+    from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, HorarioSemanal, ExcepcionHorario, Usuario
 
     SQLModel.metadata.create_all(engine)
 

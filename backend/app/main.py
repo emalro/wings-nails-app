@@ -1,15 +1,21 @@
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session, select
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from sqlmodel import Session, select, or_
 from sqlalchemy import text
+from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash
 from .database import create_db_and_tables, get_session, engine
-from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario
-from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse
+from .deps import get_current_user
+from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
 
 
 def seed_default_config(session: Session) -> None:
@@ -72,6 +78,24 @@ def run_migration(session: Session) -> None:
                 session.commit()
 
 
+def seed_admin_user(session: Session) -> None:
+    """Seed admin user from environment variables if not already present."""
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password_hash = os.getenv("ADMIN_PASSWORD_HASH")
+    if not admin_email or not admin_password_hash:
+        return
+    existing = session.exec(select(Usuario).where(Usuario.email == admin_email)).first()
+    if existing:
+        return
+    user = Usuario(
+        email=admin_email,
+        hashed_password=admin_password_hash,
+        role="admin",
+        is_active=True,
+    )
+    session.add(user)
+    session.commit()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     create_db_and_tables()
@@ -79,6 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         run_migration(session)
         seed_default_config(session)
         seed_default_schedule(session)
+        seed_admin_user(session)
     yield
 
 
@@ -89,7 +114,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = ["*"]
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -98,10 +123,97 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# ── Auth Endpoints ──────────────────────────────────────────────────────
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+def login(request: Request, login_data: LoginRequest, session: Session = Depends(get_session)):
+    user = session.exec(select(Usuario).where(Usuario.email == login_data.email)).first()
+    if not user or not verify_password(login_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id)
+    
+    response = JSONResponse(content=TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserRead(email=user.email, role=user.role),
+    ).model_dump())
+    
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        samesite="strict",
+        max_age=1800,  # 30 minutes
+        path="/",
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        samesite="strict",
+        max_age=604800,  # 7 days
+        path="/",
+    )
+    
+    return response
+
+
+@app.post("/auth/logout")
+def logout():
+    response = JSONResponse(content={"message": "Logged out"})
+    response.delete_cookie(key="access_token")
+    response.delete_cookie(key="refresh_token")
+    return response
+
+
+@app.post("/auth/refresh", response_model=dict)
+def refresh(request: Request, session: Session = Depends(get_session)):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    
+    try:
+        payload = verify_token(refresh_token, expected_type="refresh")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    
+    user_id = int(payload["sub"])
+    user = session.get(Usuario, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    
+    new_access_token = create_access_token(user.id)
+    
+    response = JSONResponse(content={"access_token": new_access_token})
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        samesite="strict",
+        max_age=1800,
+        path="/",
+    )
+    
+    return response
+
+
+@app.get("/auth/me", response_model=UserRead)
+def get_me(user: Usuario = Depends(get_current_user)):
+    return UserRead(email=user.email, role=user.role)
 
 
 @app.get("/config", response_model=ConfiguracionRead)
