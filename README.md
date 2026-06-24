@@ -1,4 +1,44 @@
-# Frontend (React + Vite)
+# Wings Nails App
+
+## Backend (FastAPI + SQLite)
+
+Run locally:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+The API will be available at `http://localhost:8000`.
+A SQLite database (`dev.db`) is created automatically on first run.
+
+Set the database URL with an environment variable (optional, defaults to SQLite):
+
+```bash
+export DATABASE_URL="sqlite:///./dev.db"
+```
+
+Run tests:
+
+```bash
+cd backend
+pytest
+```
+
+### Docker
+
+```bash
+cd backend
+docker build -t nails-backend .
+docker run -p 8000:8000 nails-backend
+```
+
+---
+
+## Frontend (React + Vite)
 
 Run locally:
 
