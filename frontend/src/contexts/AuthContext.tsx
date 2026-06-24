@@ -16,6 +16,12 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | null>(null)
 
+// Deferred promise for router beforeLoad — resolves after initial /auth/me completes
+let resolveAuthPromise!: (state: { user: User | null; isAuthenticated: boolean; isLoading: boolean }) => void
+export const authPromise: Promise<{ user: User | null; isAuthenticated: boolean; isLoading: boolean }> = new Promise((resolve) => {
+  resolveAuthPromise = resolve
+})
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -26,9 +32,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const response = await api.get('/auth/me')
         setUser(response.data)
+        resolveAuthPromise({ user: response.data, isAuthenticated: true, isLoading: false })
       } catch {
         // Not authenticated — that's fine
         setUser(null)
+        resolveAuthPromise({ user: null, isAuthenticated: false, isLoading: false })
       } finally {
         setIsLoading(false)
       }
