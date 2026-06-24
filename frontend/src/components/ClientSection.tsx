@@ -11,6 +11,7 @@ import {
   useClientAppointments,
 } from '../hooks'
 import type { ClienteRead, ClienteTelefonoRead, CitaRead } from '../api'
+import DataTable from './DataTable'
 
 function getPrimaryPhone(client: ClienteRead): string {
   const primary = client.telefonos.find(t => t.es_principal)
@@ -247,64 +248,46 @@ export default function ClientSection() {
             Mostrar inactivos
           </label>
 
-          {isLoading ? (
-            <p className="client-empty-state">Cargando...</p>
-          ) : clients.length === 0 ? (
-            <p className="client-empty-state">
-              {debouncedQuery.length >= 2
+          <DataTable
+            columns={[
+              { key: 'nombre', label: 'Nombre', sortable: true, filterable: true },
+              { key: 'apellido', label: 'Apellido', sortable: true, filterable: true },
+              { key: 'dni', label: 'DNI', filterable: true },
+              {
+                key: '_telefono',
+                label: 'Tel\u00E9fono',
+                filterable: true,
+                filterValue: (c: ClienteRead) => getPrimaryPhone(c),
+                render: (_v: any, c: ClienteRead) => (
+                  <span style={{ fontFamily: 'monospace', fontSize: '.8rem' }}>{getPrimaryPhone(c)}</span>
+                ),
+              },
+              { key: 'cantidad_turnos_tomados', label: 'Turnos', sortable: true },
+              {
+                key: 'actions',
+                label: '',
+                render: (_v: any, c: ClienteRead) => (
+                  <button
+                    type="button"
+                    className="client-view-btn"
+                    onClick={() => selectClient(c)}
+                  >
+                    Ver
+                  </button>
+                ),
+              },
+            ]}
+            data={clients}
+            keyExtractor={(c: ClienteRead) => c.id}
+            isLoading={isLoading}
+            emptyMessage={
+              debouncedQuery.length >= 2
                 ? 'No se encontraron clientas.'
-                : 'No hay clientas registradas.'}
-            </p>
-          ) : (
-            <div className="client-table-wrap">
-              <table className="client-table">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Apellido</th>
-                    <th>DNI</th>
-                    <th>Telefono</th>
-                    <th>Turnos</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client) => {
-                    const primaryPhone = getPrimaryPhone(client)
-                    return (
-                      <tr
-                        key={client.id}
-                        className={
-                          selectedClientId === client.id
-                            ? 'client-row selected'
-                            : 'client-row'
-                        }
-                        onClick={() => selectClient(client)}
-                      >
-                        <td>{client.nombre}</td>
-                        <td>{client.apellido}</td>
-                        <td>{client.dni}</td>
-                        <td className="phone-cell">{primaryPhone}</td>
-                        <td>{client.cantidad_turnos_tomados}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="client-view-btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              selectClient(client)
-                            }}
-                          >
-                            Ver
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                : 'No hay clientas registradas.'
+            }
+            searchPlaceholder="Buscar en resultados..."
+            pageSize={20}
+          />
         </div>
 
         {/* ── Right: Client Detail ── */}
