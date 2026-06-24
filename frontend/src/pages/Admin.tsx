@@ -5,6 +5,10 @@ import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
 import ManualAppointmentModal from '../components/ManualAppointmentModal'
 import ClientSection from '../components/ClientSection'
+import ServicesSection from '../components/admin/ServicesSection'
+import BusinessConfigSection from '../components/admin/BusinessConfigSection'
+import ScheduleSection from '../components/admin/ScheduleSection'
+import ExceptionsSection from '../components/admin/ExceptionsSection'
 
 type AppointmentService = {
   servicio_id: number
@@ -40,8 +44,6 @@ type Service = {
   descripcion: string
   activo: boolean
 }
-
-const statusOptions = ['Pendiente', 'Confirmado', 'Asistido', 'Cancelado_Cliente', 'Cancelado_Sistema_Vencimiento']
 
 export default function Admin() {
   const [showInactive, setShowInactive] = useState(false)
@@ -90,13 +92,6 @@ export default function Admin() {
   const [configMessage, setConfigMessage] = useState<string | null>(null)
 
   // Horarios state
-  const DAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
-  const TIME_OPTIONS = Array.from({ length: 24 * 2 }, (_, i) => {
-    const h = Math.floor(i / 2)
-    const m = i % 2 === 0 ? '00' : '30'
-    return `${String(h).padStart(2, '0')}:${m}`
-  })
-
   const { data: weeklySchedule = [], isLoading: weeklyLoading } = useWeeklySchedule()
   const updateWeeklyMutation = useUpdateWeeklySchedule()
   const { data: exceptions = [], isLoading: exceptionsLoading } = useExceptions()
@@ -303,8 +298,64 @@ export default function Admin() {
 
       {error && <div className="status-notice error">{error}</div>}
 
+      <ServicesSection
+        showInactive={showInactive}
+        setShowInactive={setShowInactive}
+        services={services}
+        serviceLoading={serviceLoading}
+        servicePayload={servicePayload}
+        setServicePayload={setServicePayload}
+        editingServiceId={editingServiceId}
+        setEditingServiceId={setEditingServiceId}
+        editingServicePayload={editingServicePayload}
+        setEditingServicePayload={setEditingServicePayload}
+        serviceMessage={serviceMessage}
+        createServiceMutation={createServiceMutation}
+        updateServiceMutation={updateServiceMutation}
+        handleCreateService={handleCreateService}
+        startEditingService={startEditingService}
+        handleUpdateService={handleUpdateService}
+        handleToggleServiceActive={handleToggleServiceActive}
+        handleDeleteService={handleDeleteService}
+      />
+
+      <BusinessConfigSection
+        configForm={configForm}
+        setConfigForm={setConfigForm}
+        configLoading={configLoading}
+        updateConfigMutation={updateConfigMutation}
+        configMessage={configMessage}
+        handleUpdateConfig={handleUpdateConfig}
+      />
+
+      <ScheduleSection
+        scheduleForm={scheduleForm}
+        setScheduleForm={setScheduleForm}
+        weeklyLoading={weeklyLoading}
+        updateWeeklyMutation={updateWeeklyMutation}
+        scheduleMessage={scheduleMessage}
+        handleSaveWeekly={handleSaveWeekly}
+      />
+
+      <ExceptionsSection
+        exceptionDate={exceptionDate}
+        setExceptionDate={setExceptionDate}
+        exceptionCerrado={exceptionCerrado}
+        setExceptionCerrado={setExceptionCerrado}
+        exceptionApertura={exceptionApertura}
+        setExceptionApertura={setExceptionApertura}
+        exceptionCierre={exceptionCierre}
+        setExceptionCierre={setExceptionCierre}
+        exceptionMessage={exceptionMessage}
+        exceptionsLoading={exceptionsLoading}
+        exceptions={exceptions}
+        createExceptionMutation={createExceptionMutation}
+        handleAddException={handleAddException}
+        handleDeleteException={handleDeleteException}
+      />
+
       {/* ── AGENDA ── */}
-      <section style={{ marginBottom: 32 }}>
+      <section style={{ marginTop: 32 }}>
         <div className="section-header" style={{ textAlign: 'left' }}>
           <span className="overline">Turnos</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>Agenda visual</h2>
@@ -325,340 +376,6 @@ export default function Admin() {
           onEventClick={handleEventClick}
         />
       </section>
-
-      {/* ── HORARIOS ── */}
-      <details open className="admin-card collapsible-card" style={{ marginTop: 24 }}>
-        <summary>
-          Horarios de Atención
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          {scheduleMessage && <div className="status-notice success">{scheduleMessage}</div>}
-
-          <h4>Horario semanal</h4>
-          {weeklyLoading ? (
-            <p>Cargando horarios...</p>
-          ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '8px 4px' }}>Día</th>
-                  <th style={{ textAlign: 'center', padding: '8px 4px' }}>Activo</th>
-                  <th style={{ textAlign: 'center', padding: '8px 4px' }}>Apertura</th>
-                  <th style={{ textAlign: 'center', padding: '8px 4px' }}>Cierre</th>
-                </tr>
-              </thead>
-              <tbody>
-                {DAY_LABELS.map((label, dia) => {
-                  const dayData = scheduleForm[dia] || { activo: false, hora_apertura: '09:00', hora_cierre: '18:00' }
-                  return (
-                    <tr key={dia}>
-                      <td style={{ padding: '6px 4px', fontWeight: 600 }}>{label}</td>
-                      <td style={{ textAlign: 'center', padding: '6px 4px' }}>
-                        <input
-                          type="checkbox"
-                          checked={dayData.activo}
-                          onChange={e => setScheduleForm({
-                            ...scheduleForm,
-                            [dia]: { ...dayData, activo: e.target.checked },
-                          })}
-                        />
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '6px 4px' }}>
-                        <select
-                          value={dayData.hora_apertura}
-                          onChange={e => setScheduleForm({
-                            ...scheduleForm,
-                            [dia]: { ...dayData, hora_apertura: e.target.value },
-                          })}
-                          disabled={!dayData.activo}
-                          style={{ padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
-                        >
-                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ textAlign: 'center', padding: '6px 4px' }}>
-                        <select
-                          value={dayData.hora_cierre}
-                          onChange={e => setScheduleForm({
-                            ...scheduleForm,
-                            [dia]: { ...dayData, hora_cierre: e.target.value },
-                          })}
-                          disabled={!dayData.activo}
-                          style={{ padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
-                        >
-                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-          <button
-            className="button-primary"
-            onClick={handleSaveWeekly}
-            disabled={updateWeeklyMutation.isPending}
-            style={{ marginTop: 12 }}
-          >
-            {updateWeeklyMutation.isPending ? 'Guardando...' : 'Guardar horario semanal'}
-          </button>
-        </div>
-      </details>
-
-      {/* ── EXCEPCIONES ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 16 }}>
-        <summary>
-          Excepciones
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          {exceptionMessage && <div className="status-notice success">{exceptionMessage}</div>}
-
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-            <input
-              type="date"
-              value={exceptionDate}
-              onChange={e => setExceptionDate(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-              <input type="checkbox" checked={exceptionCerrado} onChange={e => setExceptionCerrado(e.target.checked)} />
-              Cerrado
-            </label>
-            {!exceptionCerrado && (
-              <>
-                <select
-                  value={exceptionApertura}
-                  onChange={e => setExceptionApertura(e.target.value)}
-                  style={{ padding: '8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
-                >
-                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <span>a</span>
-                <select
-                  value={exceptionCierre}
-                  onChange={e => setExceptionCierre(e.target.value)}
-                  style={{ padding: '8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
-                >
-                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </>
-            )}
-            <button
-              className="button-primary"
-              onClick={handleAddException}
-              disabled={createExceptionMutation.isPending || !exceptionDate}
-            >
-              {createExceptionMutation.isPending ? 'Agregando...' : 'Agregar'}
-            </button>
-          </div>
-
-          {exceptionsLoading ? (
-            <p>Cargando excepciones...</p>
-          ) : exceptions.length === 0 ? (
-            <p>No hay excepciones.</p>
-          ) : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {exceptions.map((exc: any) => {
-                const fecha = new Date(exc.fecha + 'T00:00:00')
-                const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                return (
-                  <li key={exc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                    <span>
-                      <strong>{fechaStr}</strong>
-                      {exc.cerrado
-                        ? ' — Cerrado'
-                        : ` — ${exc.hora_apertura} a ${exc.hora_cierre}`
-                      }
-                    </span>
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => handleDeleteException(exc.id)}
-                      style={{ padding: '4px 12px', fontSize: '.85rem' }}
-                    >
-                      Eliminar
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      </details>
-
-      {/* ── CONFIGURACIÓN DEL NEGOCIO ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
-        <summary>
-          Configuración del negocio
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          {configMessage && <div className="status-notice success">{configMessage}</div>}
-          {configLoading ? (
-            <p>Cargando configuración...</p>
-          ) : (
-            <form onSubmit={handleUpdateConfig} className="service-form">
-              <label>
-                Nombre del emprendimiento
-                <input value={configForm.business_name} onChange={e => setConfigForm({ ...configForm, business_name: e.target.value })} />
-              </label>
-              <label>
-                URL de Facebook
-                <input value={configForm.facebook_url} onChange={e => setConfigForm({ ...configForm, facebook_url: e.target.value })} placeholder="https://facebook.com/..." />
-              </label>
-              <label>
-                URL de Instagram
-                <input value={configForm.instagram_url} onChange={e => setConfigForm({ ...configForm, instagram_url: e.target.value })} placeholder="https://instagram.com/..." />
-              </label>
-              <label>
-                Número de WhatsApp (sin + ni espacios)
-                <input value={configForm.whatsapp_number} onChange={e => setConfigForm({ ...configForm, whatsapp_number: e.target.value })} placeholder="5493412345678" />
-              </label>
-              <label>
-                Dirección del local
-                <input value={configForm.address} onChange={e => setConfigForm({ ...configForm, address: e.target.value })} placeholder="Rosario, Santa Fe" />
-              </label>
-              <label>
-                CBU / Alias
-                <input value={configForm.cbu_alias} onChange={e => setConfigForm({ ...configForm, cbu_alias: e.target.value })} placeholder="mi.alias.mp" />
-              </label>
-              <label>
-                CBU / Número
-                <input value={configForm.cbu_number} onChange={e => setConfigForm({ ...configForm, cbu_number: e.target.value })} placeholder="0000003100000000000001" />
-              </label>
-              <button className="button-primary" type="submit" disabled={updateConfigMutation.isPending}>
-                {updateConfigMutation.isPending ? 'Guardando...' : 'Guardar configuración'}
-              </button>
-            </form>
-          )}
-        </div>
-      </details>
-
-      {/* ── CLIENTAS ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
-        <summary>
-          Clientas
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          <ClientSection />
-        </div>
-      </details>
-
-      {/* ── SERVICIOS ── */}
-      <div className="admin-grid" style={{ marginTop: 24 }}>
-        <details open className="admin-card collapsible-card">
-          <summary>
-            Crear servicio
-            <span className="chevron">›</span>
-          </summary>
-          <div className="collapsible-body">
-            {serviceMessage && <div className="status-notice success">{serviceMessage}</div>}
-            <form onSubmit={handleCreateService} className="service-form">
-              <label>
-                Nombre
-                <input value={servicePayload.nombre_servicio} onChange={e => setServicePayload({ ...servicePayload, nombre_servicio: e.target.value })} required />
-              </label>
-              <label>
-                Duración (min)
-                <input type="number" value={servicePayload.duracion_minutos} onChange={e => setServicePayload({ ...servicePayload, duracion_minutos: Number(e.target.value) })} min={10} required />
-              </label>
-              <label>
-                Precio
-                <input type="number" value={servicePayload.precio_actual} onChange={e => setServicePayload({ ...servicePayload, precio_actual: Number(e.target.value) })} min={0} step={100} required />
-              </label>
-              <label>
-                Seña
-                <input type="number" value={servicePayload.monto_sena_actual} onChange={e => setServicePayload({ ...servicePayload, monto_sena_actual: Number(e.target.value) })} min={0} step={100} required />
-              </label>
-              <label>
-                Descripción
-                <textarea value={servicePayload.descripcion} onChange={e => setServicePayload({ ...servicePayload, descripcion: e.target.value })} required />
-              </label>
-              <button className="button-primary" type="submit" disabled={createServiceMutation.isPending}>
-                {createServiceMutation.isPending ? 'Creando...' : 'Agregar servicio'}
-              </button>
-            </form>
-          </div>
-        </details>
-
-        <details open className="admin-card collapsible-card">
-          <summary>
-            Servicios
-            <span className="chevron">›</span>
-          </summary>
-          <div className="collapsible-body">
-            <label className="checkbox-row">
-              <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
-              Mostrar inactivos
-            </label>
-            {serviceLoading ? (
-              <p>Cargando...</p>
-            ) : services.length === 0 ? (
-              <p>No hay servicios.</p>
-            ) : (
-              <ul className="service-list-admin">
-                {services.map((service: Service) => (
-                  <li key={service.id} className="service-row">
-                    <div>
-                      <strong>{service.nombre_servicio}</strong> — {service.duracion_minutos} min — ${service.precio_actual}
-                      {!service.activo && <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: '.85rem' }}>Inactivo</span>}
-                    </div>
-                    <div className="service-actions">
-                      <button type="button" onClick={() => startEditingService(service)}>Editar</button>
-                      <button type="button" className={service.activo ? 'danger' : ''} onClick={() => handleToggleServiceActive(service.id, service.activo)}>
-                        {service.activo ? 'Inactivar' : 'Activar'}
-                      </button>
-                      <button type="button" className="danger" onClick={() => handleDeleteService(service.id)}>
-                        Eliminar
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {editingServiceId && (
-              <div className="edit-card">
-                <h4>Editar servicio</h4>
-                <form onSubmit={handleUpdateService} className="service-form">
-                  <label>
-                    Nombre
-                    <input value={editingServicePayload.nombre_servicio} onChange={e => setEditingServicePayload({ ...editingServicePayload, nombre_servicio: e.target.value })} required />
-                  </label>
-                  <label>
-                    Duración (min)
-                    <input type="number" value={editingServicePayload.duracion_minutos} onChange={e => setEditingServicePayload({ ...editingServicePayload, duracion_minutos: Number(e.target.value) })} min={10} required />
-                  </label>
-                  <label>
-                    Precio
-                    <input type="number" value={editingServicePayload.precio_actual} onChange={e => setEditingServicePayload({ ...editingServicePayload, precio_actual: Number(e.target.value) })} min={0} step={100} required />
-                  </label>
-                  <label>
-                    Seña
-                    <input type="number" value={editingServicePayload.monto_sena_actual} onChange={e => setEditingServicePayload({ ...editingServicePayload, monto_sena_actual: Number(e.target.value) })} min={0} step={100} required />
-                  </label>
-                  <label>
-                    Descripción
-                    <textarea value={editingServicePayload.descripcion} onChange={e => setEditingServicePayload({ ...editingServicePayload, descripcion: e.target.value })} required />
-                  </label>
-                  <div className="button-row">
-                    <button className="button-primary" type="submit" disabled={updateServiceMutation.isPending}>
-                      {updateServiceMutation.isPending ? 'Guardando...' : 'Guardar'}
-                    </button>
-                    <button type="button" onClick={() => setEditingServiceId(null)} style={{ padding: '12px 20px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontWeight: 600, cursor: 'pointer' }}>
-                      Cancelar
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-        </details>
-      </div>
 
       {/* ── MODALES ── */}
       {selectedCita && !showAttendedModal && (
