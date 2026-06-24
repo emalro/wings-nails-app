@@ -383,6 +383,17 @@ export default function Admin() {
         </div>
       </details>
 
+      {/* ── CLIENTAS ── */}
+      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+        <summary>
+          Clientas
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <ClientSection />
+        </div>
+      </details>
+
       {/* ── SERVICIOS ── */}
       <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
         <summary>
