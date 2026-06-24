@@ -11,6 +11,91 @@ export const api = axios.create({
   }
 })
 
+// ── Auth API ───────────────────────────────────────────────────────────
+
+export interface UserRead {
+  email: string
+  role: string
+}
+
+export interface LoginResponse {
+  access_token: string
+  refresh_token: string
+  user: UserRead
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const r = await api.post('/auth/login', { email, password })
+  return r.data
+}
+
+export async function logout(): Promise<void> {
+  await api.post('/auth/logout')
+}
+
+export async function getMe(): Promise<UserRead> {
+  const r = await api.get('/auth/me')
+  return r.data
+}
+
+export async function refreshToken(): Promise<{ access_token: string }> {
+  const r = await api.post('/auth/refresh')
+  return r.data
+}
+
+// ── Axios Interceptors ─────────────────────────────────────────────────
+
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (value: unknown) => void
+  reject: (reason?: unknown) => void
+}> = []
+
+function processQueue(error: unknown) {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(undefined)
+    }
+  })
+  failedQueue = []
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config
+
+    // If 401 and not already retrying, attempt token refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then(() => api(originalRequest))
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        await refreshToken()
+        processQueue(null)
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError)
+        // Redirect to login on refresh failure
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
+    return Promise.reject(error)
+  }
+)
+
 export async function listServices(all = false){
   const params = all ? { all: true } : {}
   const r = await api.get('/services', { params })

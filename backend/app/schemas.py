@@ -218,3 +218,21 @@ class CitaRead(BaseModel):
     fecha_registro_cita: datetime
     duracion_total_minutos: int = 0
     servicios: List[CitaServicioRead] = []
+
+
+# Auth schemas
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    email: str
+    role: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    user: UserRead

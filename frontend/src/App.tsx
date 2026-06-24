@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import { useConfig } from './hooks'
+import { useAuth } from './hooks/useAuth'
 
 function whatsappUrl(number: string): string {
   if (!number) return '#'
@@ -37,6 +38,7 @@ function IconFacebook({ size = 22 }: { size?: number }) {
 
 export default function App() {
   const { data: config } = useConfig()
+  const { isAuthenticated } = useAuth()
 
   const businessName = config?.business_name || 'Nails Studio'
   const fbUrl = config?.facebook_url || '#'
@@ -63,6 +65,7 @@ export default function App() {
               <a href={igUrl} target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram"><IconInstagram /></a>
               <a href={fbUrl} target="_blank" rel="noopener noreferrer" title="Facebook" aria-label="Facebook"><IconFacebook /></a>
             </div>
+            <Link to={isAuthenticated ? "/admin" : "/login"} className="navbar-cta">Ingresar</Link>
             <Link to="/reservar" className="navbar-cta">Reservar Turno</Link>
           </div>
         </div>

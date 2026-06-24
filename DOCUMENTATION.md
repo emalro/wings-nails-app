@@ -238,6 +238,37 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 
 ---
 
+### 2026-06-24 — Implementación de autenticación JWT (PR #2)
+
+- **Tipo**: Nueva funcionalidad
+- **Descripción**: Implementación completa de autenticación para el panel /admin. JWT + httpOnly cookies, rate limiting en login, CORS restrictivo, extracción de Admin.tsx como prerrequisito.
+- **Archivos afectados**:
+  - `backend/app/auth.py` (nuevo) — Utilidades JWT: create_access_token, create_refresh_token, verify_token, get_password_hash
+  - `backend/app/deps.py` (nuevo) — Dependencias FastAPI: get_current_user
+  - `backend/app/models.py` (modificado) — Modelo Usuario
+  - `backend/app/schemas.py` (modificado) — Schemas LoginRequest, TokenResponse, UserRead
+  - `backend/app/main.py` (modificado) — Endpoints auth, CORS env-based, rate limiting, seed admin
+  - `backend/app/database.py` (modificado) — Import Usuario en create_db_and_tables
+  - `backend/requirements.txt` (modificado) — python-jose, passlib, slowapi
+  - `frontend/src/contexts/AuthContext.tsx` (nuevo) — Estado de autenticación
+  - `frontend/src/hooks/useAuth.ts` (nuevo) — Hook de autenticación
+  - `frontend/src/pages/Login.tsx` (nuevo) — Página de login
+  - `frontend/src/components/ProtectedRoute.tsx` (nuevo) — Ruta protegida
+  - `frontend/src/api.ts` (modificado) — Auth API + interceptor axios
+  - `frontend/src/main.tsx` (modificado) — AuthProvider + rutas
+  - `frontend/src/App.tsx` (modificado) — Navbar con botón "Ingresar"
+- **Requisitos relacionados**: 3.B Autenticación y Seguridad
+- **Motivo**: El panel admin es completamente público. Cualquiera con la URL accede a CRUD, clientas, turnos y configuración.
+- **Impacto esperado**: /admin protegido con JWT. Login obligatorio. CORS restrictivo. Rate limiting en intentos de login.
+- **Decisiones técnicas**:
+  - Tokens en httpOnly cookies (no localStorage) — protección XSS
+  - CORS: env var CORS_ORIGINS con orígenes explícitos
+  - Rate limiting: slowapi, 5 intentos/min, lockout 15 min después de 3 fallos
+  - Admin seed desde env vars en cada startup
+- **Cadena de PRs**: PR #1 (extracción) → PR #2 (este)
+
+---
+
 ## Pendientes y riesgos
 
 ### Features pendientes (de REQUIREMENTS.md)
