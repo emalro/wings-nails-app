@@ -221,6 +221,23 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 
 ---
 
+### 2026-06-24 — Extracción de componentes Admin.tsx (PR #1 de Auth)
+
+- **Tipo**: Refactor / Infraestructura
+- **Descripción**: Extracción de 4 componentes del monolito Admin.tsx (696 líneas) como prerrequisito para la implementación de autenticación. Cada componente maneja una sección independiente del panel de administración.
+- **Archivos afectados**:
+  - `frontend/src/components/admin/ScheduleSection.tsx` (nuevo) — Tabla de horarios semanales
+  - `frontend/src/components/admin/ExceptionsSection.tsx` (nuevo) — ABM de excepciones
+  - `frontend/src/components/admin/BusinessConfigSection.tsx` (nuevo) — Form de configuración del negocio
+  - `frontend/src/components/admin/ServicesSection.tsx` (nuevo) — CRUD de servicios
+  - `frontend/src/pages/Admin.tsx` (modificado) — Refactorizado a ~150 líneas, orquestador de secciones
+- **Requisitos relacionados**: 3.B Autenticación (prerrequisito), 3.E Panel de Métricas
+- **Motivo**: Admin.tsx con 696 líneas es imposible de mantener y riesgoso para integrar auth. La extracción reduce el archivo a ~150 líneas y crea componentes focados y testables.
+- **Impacto esperado**: Sin cambio funcional. Misma UI, misma lógica, mejor estructura. Preparado para envolver con ProtectedRoute en PR #2.
+- **Cadena de PRs**: PR #1 (este) → PR #2 (auth completo)
+
+---
+
 ## Pendientes y riesgos
 
 ### Features pendientes (de REQUIREMENTS.md)
