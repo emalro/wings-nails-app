@@ -59,16 +59,16 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: Form Validation
 
-- [ ] 4.1 Create `frontend/src/hooks/useFormValidation.ts` — hook accepting `ValidationSchema` (field → rules[]), returning `{ values, errors, touched, setField, validateField, validateAll, clearErrors, reset, isValid, isDirty }`; trims whitespace before validation
-- [ ] 4.2 Create `frontend/src/components/FieldError.tsx` — renders error message string or null
-- [ ] 4.3 Apply validation to `Login.tsx` — email required + valid format, password required; show `FieldError` inline, disable submit while invalid
-- [ ] 4.4 Apply validation to appointment form — client required, date required + future, at least one service, observaciones required + max 500
-- [ ] 4.5 Apply validation to admin client form — nombre/apellido/dni/teléfono required, DNI digits-only, teléfono Argentine format, email optional + valid format
-- [ ] 4.6 Verify: `tsc --noEmit` passes
+- [x] 4.1 Create `frontend/src/hooks/useFormValidation.ts` — hook accepting `ValidationSchema` (field → rules[]), returning `{ values, errors, touched, setField, validateField, validateAll, clearErrors, reset, isValid, isDirty }`; trims whitespace before validation
+- [x] 4.2 Create `frontend/src/components/FieldError.tsx` — renders error message string or null
+- [x] 4.3 Apply validation to `Login.tsx` — email required + valid format, password required; show `FieldError` inline, disable submit while invalid
+- [x] 4.4 Apply validation to appointment form — client required, date required + future, at least one service, observaciones required + max 500
+- [x] 4.5 Apply validation to admin client form — nombre/apellido/dni/teléfono required, DNI digits-only, teléfono Argentine format, email optional + valid format
+- [x] 4.6 Verify: `tsc --noEmit` passes
 
 ## Phase 5: Final Verification
 
-- [ ] 5.1 Backend: `python -m pytest` passes (no regressions)
-- [ ] 5.2 Frontend: `tsc --noEmit` passes
-- [ ] 5.3 Frontend: `npm run build` succeeds
-- [ ] 5.4 Manual E2E: login flow, admin guard redirect with reason param, table sort/filter, form validation errors clear on valid input
+- [x] 5.1 Backend: `python -m pytest` passes (no regressions) — 116 passed
+- [x] 5.2 Frontend: `tsc --noEmit` passes
+- [x] 5.3 Frontend: `npm run build` succeeds
+- [x] 5.4 Manual E2E: login flow, admin guard redirect with reason param, table sort/filter, form validation errors clear on valid input

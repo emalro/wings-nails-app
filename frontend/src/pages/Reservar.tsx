@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useConfig } from '../hooks'
+import { useFormValidation } from '../hooks/useFormValidation'
+import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import type { ConfigType } from '../api'
 
@@ -23,31 +25,62 @@ type CreatedAppointment = {
   sena_historica_pagada: number
 }
 
-type FieldErrors = {
-  nombre?: string
-  apellido?: string
-  telefono?: string
-  dni?: string
-  fechaHora?: string
-}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_RE = /^\d{10,11}$/
 
 export default function Reservar() {
   const [step, setStep] = useState<Step>('service')
   const [selectedServices, setSelectedServices] = useState<number[]>([])
-  const [nombre, setNombre] = useState('')
-  const [apellido, setApellido] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [dni, setDni] = useState('')
-  const [fechaHora, setFechaHora] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [messageType, setMessageType] = useState<'success' | 'error'>('success')
   const [appointment, setAppointment] = useState<CreatedAppointment | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [touched, setTouched] = useState<Record<string, boolean>>({})
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+
+  const form = useFormValidation({
+    nombre: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El nombre es obligatorio.' },
+      ],
+    },
+    apellido: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El apellido es obligatorio.' },
+      ],
+    },
+    telefono: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El teléfono es obligatorio.' },
+        { validate: (v: string) => PHONE_RE.test(v.trim()), message: 'Ingresá un teléfono válido (10-11 dígitos).' },
+      ],
+    },
+    dni: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El DNI es obligatorio.' },
+        { validate: (v: string) => /^\d{7,8}$/.test(v.trim()), message: 'El DNI debe tener 7 u 8 dígitos.' },
+      ],
+    },
+    fechaHora: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.length > 0, message: 'Elegí fecha y hora para tu turno.' },
+        { validate: (v: string) => !v || new Date(v) > new Date(), message: 'La fecha debe ser futura.' },
+      ],
+    },
+    observaciones: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'Las observaciones son obligatorias.' },
+        { validate: (v: string) => v.trim().length <= 500, message: 'Máximo 500 caracteres.' },
+      ],
+    },
+  })
 
   const { data: services = [], isLoading } = useServices()
-  const fecha = fechaHora ? fechaHora.split('T')[0] : ''
+  const fecha = form.values.fechaHora ? form.values.fechaHora.split('T')[0] : ''
   const { data: busySlots = [] } = useBusySlots(fecha)
   const { data: config } = useConfig()
 
@@ -78,64 +111,6 @@ export default function Reservar() {
     setMessage(null)
   }
 
-  // ── Field validation ────────────────────────────────────────────────
-
-  function validateField(name: string, value: string): string | undefined {
-    switch (name) {
-      case 'nombre': return !value.trim() ? 'El nombre es obligatorio.' : undefined
-      case 'apellido': return !value.trim() ? 'El apellido es obligatorio.' : undefined
-      case 'telefono':
-        if (!value.trim()) return 'El teléfono es obligatorio.'
-        if (!/^\d{6,}$/.test(value.trim())) return 'Ingresá al menos 6 dígitos.'
-        return undefined
-      case 'dni':
-        if (!value.trim()) return 'El DNI es obligatorio.'
-        if (!/^\d{7,8}$/.test(value.trim())) return 'El DNI debe tener 7 u 8 dígitos.'
-        return undefined
-      case 'fechaHora': return !value ? 'Elegí fecha y hora para tu turno.' : undefined
-      default: return undefined
-    }
-  }
-
-  function handleBlur(name: string) {
-    setTouched(prev => ({ ...prev, [name]: true }))
-    const value = { nombre, apellido, telefono, dni, fechaHora }[name] || ''
-    const error = validateField(name, value)
-    setFieldErrors(prev => ({ ...prev, [name]: error }))
-  }
-
-  function handleFieldChange(name: string, value: string, setter: (v: string) => void) {
-    setter(value)
-    if (touched[name]) {
-      const error = validateField(name, value)
-      setFieldErrors(prev => ({ ...prev, [name]: error }))
-    }
-  }
-
-  function hasAnyError(fields: FieldErrors): boolean {
-    return Object.values(fields).some(e => !!e)
-  }
-
-  function validateAllFields(): FieldErrors {
-    const errs: FieldErrors = {}
-    const fields = [
-      ['nombre', nombre],
-      ['apellido', apellido],
-      ['telefono', telefono],
-      ['dni', dni],
-      ['fechaHora', fechaHora],
-    ] as const
-    for (const [name, value] of fields) {
-      const error = validateField(name, value)
-      if (error) errs[name as keyof FieldErrors] = error
-    }
-    return errs
-  }
-
-  function markAllTouched() {
-    setTouched({ nombre: true, apellido: true, telefono: true, dni: true, fechaHora: true })
-  }
-
   // ── Navigation ──────────────────────────────────────────────────────
 
   function handleNextToForm() {
@@ -149,16 +124,12 @@ export default function Reservar() {
   }
 
   function handleNextToConfirm() {
-    const errs = validateAllFields()
-    setFieldErrors(errs)
-    markAllTouched()
-
-    if (hasAnyError(errs)) {
+    if (!form.validate()) {
       setMessageType('error')
       setMessage('Corregí los campos marcados antes de continuar.')
       return
     }
-    if (isBusySlot(fechaHora, totalDuration)) {
+    if (isBusySlot(form.values.fechaHora, totalDuration)) {
       setMessageType('error')
       setMessage('El horario elegido se solapa con otra reserva. Elegí otra franja.')
       return
@@ -173,10 +144,15 @@ export default function Reservar() {
     setMessage(null)
 
     try {
-      const client = await createClientMutation.mutateAsync({ nombre, apellido, telefono, dni })
+      const client = await createClientMutation.mutateAsync({
+        nombre: form.values.nombre,
+        apellido: form.values.apellido,
+        telefono: form.values.telefono,
+        dni: form.values.dni,
+      })
       const appointmentPayload = {
         id_cliente: client.id,
-        fecha_hora_cita: fechaHora,
+        fecha_hora_cita: form.values.fechaHora,
         precio_historico_cobrado: totalAmount,
         sena_historica_pagada: depositAmount,
         servicios: selectedServiceList.map((s: Service) => ({
@@ -321,75 +297,79 @@ export default function Reservar() {
             <div className="input-group">
               <label>Nombre</label>
               <input
-                value={nombre}
-                onChange={e => handleFieldChange('nombre', e.target.value, setNombre)}
-                onBlur={() => handleBlur('nombre')}
+                value={form.values.nombre}
+                onChange={e => form.setField('nombre', e.target.value)}
                 placeholder="Nombre"
-                className={touched.nombre && fieldErrors.nombre ? 'input-error' : ''}
+                className={form.touched.nombre && form.errors.nombre ? 'input-error' : ''}
                 required
               />
-              {touched.nombre && fieldErrors.nombre && (
-                <span className="field-error">{fieldErrors.nombre}</span>
-              )}
+              <FieldError name="nombre" errors={form.errors} touched={form.touched} />
             </div>
             <div className="input-group">
               <label>Apellido</label>
               <input
-                value={apellido}
-                onChange={e => handleFieldChange('apellido', e.target.value, setApellido)}
-                onBlur={() => handleBlur('apellido')}
+                value={form.values.apellido}
+                onChange={e => form.setField('apellido', e.target.value)}
                 placeholder="Apellido"
-                className={touched.apellido && fieldErrors.apellido ? 'input-error' : ''}
+                className={form.touched.apellido && form.errors.apellido ? 'input-error' : ''}
                 required
               />
-              {touched.apellido && fieldErrors.apellido && (
-                <span className="field-error">{fieldErrors.apellido}</span>
-              )}
+              <FieldError name="apellido" errors={form.errors} touched={form.touched} />
             </div>
           </div>
 
           <div className="input-group">
             <label>DNI</label>
             <input
-              value={dni}
-              onChange={e => handleFieldChange('dni', e.target.value, setDni)}
-              onBlur={() => handleBlur('dni')}
+              value={form.values.dni}
+              onChange={e => form.setField('dni', e.target.value)}
               placeholder="12345678"
-              className={touched.dni && fieldErrors.dni ? 'input-error' : ''}
+              className={form.touched.dni && form.errors.dni ? 'input-error' : ''}
               required
             />
-            {touched.dni && fieldErrors.dni && (
-              <span className="field-error">{fieldErrors.dni}</span>
-            )}
+            <FieldError name="dni" errors={form.errors} touched={form.touched} />
           </div>
 
           <div className="input-group">
             <label>Teléfono (WhatsApp)</label>
             <input
-              value={telefono}
-              onChange={e => handleFieldChange('telefono', e.target.value, setTelefono)}
-              onBlur={() => handleBlur('telefono')}
+              value={form.values.telefono}
+              onChange={e => form.setField('telefono', e.target.value)}
               placeholder="3411234567"
-              className={touched.telefono && fieldErrors.telefono ? 'input-error' : ''}
+              className={form.touched.telefono && form.errors.telefono ? 'input-error' : ''}
               required
             />
-            {touched.telefono && fieldErrors.telefono && (
-              <span className="field-error">{fieldErrors.telefono}</span>
-            )}
+            <FieldError name="telefono" errors={form.errors} touched={form.touched} />
           </div>
 
           <div className="input-group">
             <label>Fecha y hora</label>
             <Calendar
-              selectedDateTime={fechaHora}
+              selectedDateTime={form.values.fechaHora}
               onDateTimeChange={(dt: string) => {
-                handleFieldChange('fechaHora', dt, setFechaHora)
+                form.setField('fechaHora', dt)
               }}
               serviceDuration={totalDuration || 60}
             />
-            {touched.fechaHora && fieldErrors.fechaHora && (
-              <span className="field-error">{fieldErrors.fechaHora}</span>
-            )}
+            <FieldError name="fechaHora" errors={form.errors} touched={form.touched} />
+          </div>
+
+          <div className="input-group">
+            <label>Observaciones</label>
+            <textarea
+              value={form.values.observaciones}
+              onChange={e => form.setField('observaciones', e.target.value)}
+              placeholder="Detalles adicionales para tu turno..."
+              maxLength={500}
+              rows={3}
+              className={form.touched.observaciones && form.errors.observaciones ? 'input-error' : ''}
+              style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc', resize: 'vertical', fontFamily: 'inherit' }}
+              required
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <FieldError name="observaciones" errors={form.errors} touched={form.touched} />
+              <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{form.values.observaciones.length}/500</span>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
@@ -459,8 +439,8 @@ export default function Reservar() {
                 <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Duración total</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>{totalDuration} min</td></tr>
                 <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Total</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>${totalAmount}</td></tr>
                 <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Seña</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>${depositAmount}</td></tr>
-                {fechaHora && (
-                  <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Fecha y hora</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>{new Date(fechaHora).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</td></tr>
+                {form.values.fechaHora && (
+                  <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Fecha y hora</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>{new Date(form.values.fechaHora).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(form.values.fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</td></tr>
                 )}
               </tbody>
             </table>
@@ -468,9 +448,12 @@ export default function Reservar() {
           <hr style={{ margin: '12px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Nombre</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{nombre} {apellido}</td></tr>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>DNI</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{dni}</td></tr>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Teléfono</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{telefono}</td></tr>
+              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Nombre</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.nombre} {form.values.apellido}</td></tr>
+              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>DNI</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.dni}</td></tr>
+              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Teléfono</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.telefono}</td></tr>
+              {form.values.observaciones.trim() && (
+                <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Observaciones</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.observaciones}</td></tr>
+              )}
             </tbody>
           </table>
         </div>
