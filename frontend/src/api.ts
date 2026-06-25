@@ -84,6 +84,10 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError)
+        // Redirect to login with session-expired reason
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          window.location.href = '/login?reason=session-expired'
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

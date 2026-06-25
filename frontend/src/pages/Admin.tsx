@@ -9,6 +9,8 @@ import ServicesSection from '../components/admin/ServicesSection'
 import BusinessConfigSection from '../components/admin/BusinessConfigSection'
 import ScheduleSection from '../components/admin/ScheduleSection'
 import ExceptionsSection from '../components/admin/ExceptionsSection'
+import DataTable from '../components/DataTable'
+import type { Column } from '../components/DataTable'
 
 type AppointmentService = {
   servicio_id: number
@@ -67,8 +69,12 @@ export default function Admin() {
     descripcion: '',
   })
   const [showManualModal, setShowManualModal] = useState(false)
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('')
 
   const { data: appointments = [], isLoading: loading, refetch: refetchAppointments } = useAppointments()
+  const filteredAppointments = appointmentStatusFilter
+    ? appointments.filter((a: any) => a.estado_cita === appointmentStatusFilter)
+    : appointments
   const { data: services = [], isLoading: serviceLoading } = useServices(showInactive)
 
   const statusMutation = useUpdateAppointmentStatus()
@@ -304,7 +310,21 @@ export default function Admin() {
           <span className="overline">Turnos</span>
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>Agenda visual</h2>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Filtrar por estado:</span>
+            <select
+              value={appointmentStatusFilter}
+              onChange={(e) => setAppointmentStatusFilter(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontSize: '.85rem' }}
+            >
+              <option value="">Todos</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Confirmado">Confirmado</option>
+              <option value="Asistido">Asistido</option>
+              <option value="Cancelado">Cancelado</option>
+            </select>
+          </div>
           <button
             type="button"
             className="button-primary"
@@ -314,6 +334,65 @@ export default function Admin() {
             Cargar Turno Manual
           </button>
         </div>
+
+        {filteredAppointments.length > 0 && loading === false && (
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', marginBottom: 12 }}>Lista de turnos</h3>
+            <DataTable
+              columns={[
+                { key: 'cliente_nombre', label: 'Cliente', sortable: true, filterable: true },
+                {
+                  key: 'servicios',
+                  label: 'Servicio(s)',
+                  filterable: true,
+                  filterValue: (a: any) => (a.servicios || []).map((s: any) => s.nombre_servicio).join(' '),
+                  render: (_v: any, row: any) => {
+                    if (!row.servicios || row.servicios.length === 0) return <span className="data-table-null">&mdash;</span>
+                    const names = row.servicios.map((s: any) => s.nombre_servicio)
+                    if (names.length <= 3) return names.join(', ')
+                    return `${names.slice(0, 3).join(', ')} y ${names.length - 3} m\u00E1s`
+                  },
+                },
+                {
+                  key: 'fecha_hora_cita',
+                  label: 'Fecha',
+                  sortable: true,
+                  sortFn: (a: any, b: any) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime(),
+                  render: (v: string) => {
+                    if (!v) return <span className="data-table-null">&mdash;</span>
+                    return new Date(v).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  },
+                },
+                {
+                  key: '_hora',
+                  label: 'Hora',
+                  render: (_v: any, row: any) => {
+                    if (!row.fecha_hora_cita) return <span className="data-table-null">&mdash;</span>
+                    return new Date(row.fecha_hora_cita).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+                  },
+                },
+                { key: 'estado_cita', label: 'Estado', sortable: true },
+                {
+                  key: 'actions',
+                  label: 'Acciones',
+                  render: (_v: any, row: any) => (
+                    <div className="data-table-actions">
+                      <button className="primary" type="button" onClick={() => handleMarkAttended(row)}>Asisti\u00F3</button>
+                      <button className="danger" type="button" onClick={() => handleDeleteAppointment(row.id)}>Eliminar</button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={filteredAppointments}
+              keyExtractor={(a: any) => a.id}
+              isLoading={false}
+              emptyMessage="No hay turnos registrados."
+              searchPlaceholder="Buscar turno..."
+              pageSize={15}
+            />
+          </div>
+        )}
+
         <CalendarView
           appointments={appointments}
           loading={loading}

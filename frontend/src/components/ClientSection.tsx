@@ -10,7 +10,13 @@ import {
   useDeletePhone,
   useClientAppointments,
 } from '../hooks'
+import { useFormValidation } from '../hooks/useFormValidation'
+import FieldError from './FieldError'
 import type { ClienteRead, ClienteTelefonoRead, CitaRead } from '../api'
+import DataTable from './DataTable'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_RE = /^\d{10,11}$/
 
 function getPrimaryPhone(client: ClienteRead): string {
   const primary = client.telefonos.find(t => t.es_principal)
@@ -42,9 +48,40 @@ export default function ClientSection() {
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
 
   // Edit form state
-  const [editNombre, setEditNombre] = useState('')
-  const [editApellido, setEditApellido] = useState('')
-  const [editDni, setEditDni] = useState('')
+  const editForm = useFormValidation({
+    nombre: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El nombre es requerido.' },
+      ],
+    },
+    apellido: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El apellido es requerido.' },
+      ],
+    },
+    dni: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El DNI es requerido.' },
+        { validate: (v: string) => /^\d+$/.test(v.trim()), message: 'El DNI debe contener solo dígitos.' },
+      ],
+    },
+    telefono: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length > 0, message: 'El teléfono es requerido.' },
+        { validate: (v: string) => PHONE_RE.test(v.trim()), message: 'Formato de teléfono inválido (10-11 dígitos).' },
+      ],
+    },
+    email: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.trim().length === 0 || EMAIL_RE.test(v.trim()), message: 'Email inválido.' },
+      ],
+    },
+  })
 
   // Add phone form state
   const [addPhoneNumber, setAddPhoneNumber] = useState('')
@@ -81,9 +118,13 @@ export default function ClientSection() {
   // Populate edit form when selected client loads
   useEffect(() => {
     if (clientDetail) {
-      setEditNombre(clientDetail.nombre)
-      setEditApellido(clientDetail.apellido)
-      setEditDni(clientDetail.dni)
+      editForm.setFields({
+        nombre: clientDetail.nombre,
+        apellido: clientDetail.apellido,
+        dni: clientDetail.dni,
+        telefono: clientDetail.telefonos.find(t => t.es_principal)?.telefono || clientDetail.telefonos[0]?.telefono || '',
+        email: '',
+      })
     }
   }, [clientDetail])
 
@@ -91,17 +132,23 @@ export default function ClientSection() {
 
   function selectClient(client: ClienteRead) {
     setSelectedClientId(client.id)
-    setEditNombre(client.nombre)
-    setEditApellido(client.apellido)
-    setEditDni(client.dni)
+    editForm.setFields({
+      nombre: client.nombre,
+      apellido: client.apellido,
+      dni: client.dni,
+      telefono: client.telefonos.find(t => t.es_principal)?.telefono || client.telefonos[0]?.telefono || '',
+      email: '',
+    })
     setMessage(null)
   }
 
   function handleSaveEdit() {
     if (!selectedClientId) return
+    if (!editForm.validate()) return
     setMessage(null)
+    const { nombre, apellido, dni } = editForm.values
     updateClientMutation.mutate(
-      { id: selectedClientId, payload: { nombre: editNombre, apellido: editApellido, dni: editDni } },
+      { id: selectedClientId, payload: { nombre, apellido, dni } },
       {
         onSuccess: () => {
           setMessage('Datos actualizados.')
@@ -247,64 +294,46 @@ export default function ClientSection() {
             Mostrar inactivos
           </label>
 
-          {isLoading ? (
-            <p className="client-empty-state">Cargando...</p>
-          ) : clients.length === 0 ? (
-            <p className="client-empty-state">
-              {debouncedQuery.length >= 2
+          <DataTable
+            columns={[
+              { key: 'nombre', label: 'Nombre', sortable: true, filterable: true },
+              { key: 'apellido', label: 'Apellido', sortable: true, filterable: true },
+              { key: 'dni', label: 'DNI', filterable: true },
+              {
+                key: '_telefono',
+                label: 'Tel\u00E9fono',
+                filterable: true,
+                filterValue: (c: ClienteRead) => getPrimaryPhone(c),
+                render: (_v: any, c: ClienteRead) => (
+                  <span style={{ fontFamily: 'monospace', fontSize: '.8rem' }}>{getPrimaryPhone(c)}</span>
+                ),
+              },
+              { key: 'cantidad_turnos_tomados', label: 'Turnos', sortable: true },
+              {
+                key: 'actions',
+                label: '',
+                render: (_v: any, c: ClienteRead) => (
+                  <button
+                    type="button"
+                    className="client-view-btn"
+                    onClick={() => selectClient(c)}
+                  >
+                    Ver
+                  </button>
+                ),
+              },
+            ]}
+            data={clients}
+            keyExtractor={(c: ClienteRead) => c.id}
+            isLoading={isLoading}
+            emptyMessage={
+              debouncedQuery.length >= 2
                 ? 'No se encontraron clientas.'
-                : 'No hay clientas registradas.'}
-            </p>
-          ) : (
-            <div className="client-table-wrap">
-              <table className="client-table">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Apellido</th>
-                    <th>DNI</th>
-                    <th>Telefono</th>
-                    <th>Turnos</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client) => {
-                    const primaryPhone = getPrimaryPhone(client)
-                    return (
-                      <tr
-                        key={client.id}
-                        className={
-                          selectedClientId === client.id
-                            ? 'client-row selected'
-                            : 'client-row'
-                        }
-                        onClick={() => selectClient(client)}
-                      >
-                        <td>{client.nombre}</td>
-                        <td>{client.apellido}</td>
-                        <td>{client.dni}</td>
-                        <td className="phone-cell">{primaryPhone}</td>
-                        <td>{client.cantidad_turnos_tomados}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="client-view-btn"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              selectClient(client)
-                            }}
-                          >
-                            Ver
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                : 'No hay clientas registradas.'
+            }
+            searchPlaceholder="Buscar en resultados..."
+            pageSize={20}
+          />
         </div>
 
         {/* ── Right: Client Detail ── */}
@@ -327,17 +356,55 @@ export default function ClientSection() {
                 <div className="client-edit-row two-cols">
                   <label>
                     Nombre
-                    <input value={editNombre} onChange={(e) => setEditNombre(e.target.value)} />
+                    <input
+                      value={editForm.values.nombre}
+                      onChange={(e) => editForm.setField('nombre', e.target.value)}
+                      className={editForm.touched.nombre && editForm.errors.nombre ? 'input-error' : ''}
+                    />
+                    <FieldError name="nombre" errors={editForm.errors} touched={editForm.touched} />
                   </label>
                   <label>
                     Apellido
-                    <input value={editApellido} onChange={(e) => setEditApellido(e.target.value)} />
+                    <input
+                      value={editForm.values.apellido}
+                      onChange={(e) => editForm.setField('apellido', e.target.value)}
+                      className={editForm.touched.apellido && editForm.errors.apellido ? 'input-error' : ''}
+                    />
+                    <FieldError name="apellido" errors={editForm.errors} touched={editForm.touched} />
+                  </label>
+                </div>
+                <div className="client-edit-row two-cols">
+                  <label>
+                    DNI
+                    <input
+                      value={editForm.values.dni}
+                      onChange={(e) => editForm.setField('dni', e.target.value)}
+                      className={editForm.touched.dni && editForm.errors.dni ? 'input-error' : ''}
+                    />
+                    <FieldError name="dni" errors={editForm.errors} touched={editForm.touched} />
+                  </label>
+                  <label>
+                    Teléfono
+                    <input
+                      value={editForm.values.telefono}
+                      onChange={(e) => editForm.setField('telefono', e.target.value)}
+                      placeholder="3411234567"
+                      className={editForm.touched.telefono && editForm.errors.telefono ? 'input-error' : ''}
+                    />
+                    <FieldError name="telefono" errors={editForm.errors} touched={editForm.touched} />
                   </label>
                 </div>
                 <div className="client-edit-row">
                   <label>
-                    DNI
-                    <input value={editDni} onChange={(e) => setEditDni(e.target.value)} />
+                    Email (opcional)
+                    <input
+                      type="email"
+                      value={editForm.values.email}
+                      onChange={(e) => editForm.setField('email', e.target.value)}
+                      placeholder="cliente@email.com"
+                      className={editForm.touched.email && editForm.errors.email ? 'input-error' : ''}
+                    />
+                    <FieldError name="email" errors={editForm.errors} touched={editForm.touched} />
                   </label>
                 </div>
                 <div className="client-edit-actions">
@@ -345,7 +412,7 @@ export default function ClientSection() {
                     className="button-primary"
                     style={{ width: 'auto', padding: '8px 20px', fontSize: '.85rem' }}
                     onClick={handleSaveEdit}
-                    disabled={updateClientMutation.isPending}
+                    disabled={updateClientMutation.isPending || !editForm.isValid}
                   >
                     {updateClientMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
                   </button>

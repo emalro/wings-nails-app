@@ -1,4 +1,5 @@
 import React from 'react'
+import DataTable from '../DataTable'
 
 type Service = {
   id: number
@@ -97,31 +98,51 @@ export default function ServicesSection({
           <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
           Mostrar inactivos
         </label>
-        {serviceLoading ? (
-          <p>Cargando...</p>
-        ) : services.length === 0 ? (
-          <p>No hay servicios.</p>
-        ) : (
-          <ul className="service-list-admin">
-            {services.map((service) => (
-              <li key={service.id} className="service-row">
-                <div>
-                  <strong>{service.nombre_servicio}</strong> — {service.duracion_minutos} min — ${service.precio_actual}
-                  {!service.activo && <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: '.85rem' }}>Inactivo</span>}
-                </div>
-                <div className="service-actions">
-                  <button type="button" onClick={() => startEditingService(service)}>Editar</button>
-                  <button type="button" className={service.activo ? 'danger' : ''} onClick={() => handleToggleServiceActive(service.id, service.activo)}>
-                    {service.activo ? 'Inactivar' : 'Activar'}
+        <DataTable
+          columns={[
+            { key: 'nombre_servicio', label: 'Nombre', sortable: true, filterable: true },
+            {
+              key: 'duracion_minutos',
+              label: 'Duración',
+              sortable: true,
+              render: (v: number) => (v != null ? `${v} min` : <span className="data-table-null">&mdash;</span>),
+            },
+            {
+              key: 'precio_actual',
+              label: 'Precio',
+              sortable: true,
+              render: (v: number) => (v != null ? `$${v.toLocaleString('es-AR')}` : <span className="data-table-null">&mdash;</span>),
+            },
+            {
+              key: 'actions',
+              label: 'Acciones',
+              render: (_v: any, row: Service) => (
+                <div className="data-table-actions">
+                  <button type="button" onClick={() => startEditingService(row)}>Editar</button>
+                  <button
+                    type="button"
+                    className={row.activo ? 'danger' : ''}
+                    onClick={() => handleToggleServiceActive(row.id, row.activo)}
+                  >
+                    {row.activo ? 'Inactivar' : 'Activar'}
                   </button>
-                  <button type="button" className="danger" onClick={() => handleDeleteService(service.id)}>
+                  <button type="button" className="danger" onClick={() => handleDeleteService(row.id)}>
                     Eliminar
                   </button>
+                  {!row.activo && (
+                    <span style={{ color: 'var(--muted)', fontSize: '.78rem', alignSelf: 'center' }}>Inactivo</span>
+                  )}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              ),
+            },
+          ]}
+          data={services}
+          keyExtractor={(s: Service) => s.id}
+          isLoading={serviceLoading}
+          emptyMessage="No hay servicios."
+          searchPlaceholder="Buscar servicio..."
+          pageSize={20}
+        />
 
         {editingServiceId && (
           <div className="edit-card">

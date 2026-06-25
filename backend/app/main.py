@@ -17,6 +17,7 @@ from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
 from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
 
+LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 
 def seed_default_config(session: Session) -> None:
     existing = session.get(Configuracion, 1)
@@ -138,6 +139,7 @@ def health_check():
 
 
 @app.post("/auth/login", response_model=TokenResponse)
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(request: Request, login_data: LoginRequest, session: Session = Depends(get_session)):
     user = session.exec(select(Usuario).where(Usuario.email == login_data.email)).first()
     if not user or not verify_password(login_data.password, user.hashed_password):
@@ -217,7 +219,7 @@ def get_me(user: Usuario = Depends(get_current_user)):
 
 
 @app.get("/config", response_model=ConfiguracionRead)
-def get_config(session: Session = Depends(get_session)):
+def get_config(current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     config = session.get(Configuracion, 1)
     if not config:
         config = Configuracion(id=1)
@@ -228,7 +230,7 @@ def get_config(session: Session = Depends(get_session)):
 
 
 @app.put("/config", response_model=ConfiguracionRead)
-def update_config(update: ConfiguracionUpdate, session: Session = Depends(get_session)):
+def update_config(update: ConfiguracionUpdate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     config = session.get(Configuracion, 1)
     if not config:
         config = Configuracion(id=1)
@@ -269,7 +271,7 @@ def _build_cliente_read_response(client: Cliente, session: Session) -> dict:
 
 
 @app.post("/clients", response_model=ClienteRead)
-def create_client(client: ClienteCreate, session: Session = Depends(get_session)):
+def create_client(client: ClienteCreate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     normalized_phone = normalize_phone(client.telefono)
 
     # 1. Search by DNI (primary identifier)
@@ -311,6 +313,7 @@ def create_client(client: ClienteCreate, session: Session = Depends(get_session)
 @app.get("/clients", response_model=list[ClienteRead])
 def list_clients(
     incluir_inactivos: bool = False,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     statement = select(Cliente)
@@ -324,6 +327,7 @@ def list_clients(
 def search_clients(
     q: str = Query(min_length=0),
     incluir_inactivos: bool = False,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     if len(q) < 2:
@@ -358,7 +362,7 @@ def search_clients(
 
 
 @app.get("/clients/{client_id}", response_model=ClienteRead)
-def get_client(client_id: int, session: Session = Depends(get_session)):
+def get_client(client_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -369,6 +373,7 @@ def get_client(client_id: int, session: Session = Depends(get_session)):
 def update_client(
     client_id: int,
     payload: ClienteUpdate,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     client = session.get(Cliente, client_id)
@@ -384,7 +389,7 @@ def update_client(
 
 
 @app.delete("/clients/{client_id}", status_code=204)
-def delete_client(client_id: int, session: Session = Depends(get_session)):
+def delete_client(client_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -394,7 +399,7 @@ def delete_client(client_id: int, session: Session = Depends(get_session)):
 
 
 @app.post("/clients/{client_id}/reactivate", response_model=ClienteRead)
-def reactivate_client(client_id: int, session: Session = Depends(get_session)):
+def reactivate_client(client_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -409,7 +414,7 @@ def reactivate_client(client_id: int, session: Session = Depends(get_session)):
 
 
 @app.get("/clients/{client_id}/phones", response_model=list[ClienteTelefonoRead])
-def list_client_phones(client_id: int, session: Session = Depends(get_session)):
+def list_client_phones(client_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -425,6 +430,7 @@ def list_client_phones(client_id: int, session: Session = Depends(get_session)):
 def add_client_phone(
     client_id: int,
     payload: ClienteTelefonoCreate,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     client = session.get(Cliente, client_id)
@@ -454,6 +460,7 @@ def update_client_phone(
     client_id: int,
     phone_id: int,
     payload: ClienteTelefonoUpdate,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     client = session.get(Cliente, client_id)
@@ -491,6 +498,7 @@ def update_client_phone(
 def delete_client_phone(
     client_id: int,
     phone_id: int,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     client = session.get(Cliente, client_id)
@@ -518,7 +526,7 @@ def delete_client_phone(
 
 
 @app.get("/clients/{client_id}/appointments", response_model=list[CitaRead])
-def get_client_appointments(client_id: int, session: Session = Depends(get_session)):
+def get_client_appointments(client_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -531,7 +539,7 @@ def get_client_appointments(client_id: int, session: Session = Depends(get_sessi
 
 
 @app.post("/services", response_model=ServicioRead)
-def create_service(service: ServicioCreate, session: Session = Depends(get_session)):
+def create_service(service: ServicioCreate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     db_service = Servicio.model_validate(service)
     session.add(db_service)
     session.commit()
@@ -540,7 +548,7 @@ def create_service(service: ServicioCreate, session: Session = Depends(get_sessi
 
 
 @app.patch("/services/{service_id}", response_model=ServicioRead)
-def update_service(service_id: int, service_update: ServicioUpdate, session: Session = Depends(get_session)):
+def update_service(service_id: int, service_update: ServicioUpdate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     service = session.get(Servicio, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
@@ -556,7 +564,7 @@ def update_service(service_id: int, service_update: ServicioUpdate, session: Ses
 
 
 @app.delete("/services/{service_id}")
-def delete_service(service_id: int, session: Session = Depends(get_session)):
+def delete_service(service_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     service = session.get(Servicio, service_id)
     if not service:
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
@@ -571,7 +579,7 @@ def delete_service(service_id: int, session: Session = Depends(get_session)):
 
 
 @app.get("/services", response_model=list[ServicioRead])
-def list_services(all: bool = False, session: Session = Depends(get_session)):
+def list_services(all: bool = False, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     statement = select(Servicio)
     if not all:
         statement = statement.where(Servicio.activo == True)
@@ -624,7 +632,7 @@ def build_cita_response(cita: Cita, session: Session) -> dict:
 
 
 @app.post("/appointments", response_model=CitaRead)
-def create_appointment(appointment: CitaCreate, session: Session = Depends(get_session)):
+def create_appointment(appointment: CitaCreate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, appointment.id_cliente)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -668,14 +676,14 @@ def create_appointment(appointment: CitaCreate, session: Session = Depends(get_s
 
 
 @app.get("/appointments", response_model=list[CitaRead])
-def list_appointments(session: Session = Depends(get_session)):
+def list_appointments(current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     statement = select(Cita)
     citas = session.exec(statement).all()
     return [build_cita_response(cita, session) for cita in citas]
 
 
 @app.patch("/appointments/{appointment_id}", response_model=CitaRead)
-def update_appointment(appointment_id: int, appointment: CitaUpdate, session: Session = Depends(get_session)):
+def update_appointment(appointment_id: int, appointment: CitaUpdate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     cita = session.get(Cita, appointment_id)
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
@@ -747,7 +755,7 @@ def update_appointment(appointment_id: int, appointment: CitaUpdate, session: Se
 
 
 @app.delete("/appointments/{appointment_id}")
-def delete_appointment(appointment_id: int, session: Session = Depends(get_session)):
+def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     cita = session.get(Cita, appointment_id)
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
@@ -762,7 +770,7 @@ def delete_appointment(appointment_id: int, session: Session = Depends(get_sessi
 
 
 @app.get("/busy_slots")
-def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
+def get_busy_slots(date_str: str, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     try:
         target_date = date.fromisoformat(date_str)
     except ValueError:
@@ -807,7 +815,7 @@ def _python_weekday_to_schema(python_weekday: int) -> int:
 
 
 @app.get("/schedule/weekly", response_model=list[HorarioSemanalRead])
-def get_weekly_schedule(session: Session = Depends(get_session)):
+def get_weekly_schedule(current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     statement = select(HorarioSemanal).order_by(HorarioSemanal.dia_semana)
     return session.exec(statement).all()
 
@@ -815,6 +823,7 @@ def get_weekly_schedule(session: Session = Depends(get_session)):
 @app.put("/schedule/weekly", response_model=list[HorarioSemanalRead])
 def update_weekly_schedule(
     schedule: list[HorarioSemanalUpdate],
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     for day in schedule:
@@ -840,7 +849,7 @@ def update_weekly_schedule(
 
 
 @app.get("/schedule/exceptions", response_model=list[ExcepcionHorarioRead])
-def get_exceptions(session: Session = Depends(get_session)):
+def get_exceptions(current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     statement = select(ExcepcionHorario).order_by(ExcepcionHorario.fecha.desc())
     return session.exec(statement).all()
 
@@ -848,6 +857,7 @@ def get_exceptions(session: Session = Depends(get_session)):
 @app.post("/schedule/exceptions", response_model=ExcepcionHorarioRead)
 def create_exception(
     payload: ExcepcionHorarioCreate,
+    current_user: Usuario = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
     # Validate hours when not cerrado
@@ -882,7 +892,7 @@ def create_exception(
 
 
 @app.delete("/schedule/exceptions/{exception_id}")
-def delete_exception(exception_id: int, session: Session = Depends(get_session)):
+def delete_exception(exception_id: int, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     exc = session.get(ExcepcionHorario, exception_id)
     if not exc:
         raise HTTPException(status_code=404, detail="Excepción no encontrada")
@@ -892,7 +902,7 @@ def delete_exception(exception_id: int, session: Session = Depends(get_session))
 
 
 @app.get("/schedule/effective", response_model=EffectiveHoursResponse)
-def get_effective_hours(date: str = Query(alias="date"), session: Session = Depends(get_session)):
+def get_effective_hours(date: str = Query(alias="date"), current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     except (ValueError, TypeError):

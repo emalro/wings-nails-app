@@ -92,6 +92,40 @@ El modal DEBE tener un botón "Cancelar" que lo cierra sin cambios.
 - THEN el modal muestra mensaje de error y permanece abierto
 - Y el usuario puede reintentar o cancelar
 
+### CAL-004 — Admin Route Protection
+
+All admin routes SHALL require authentication via JWT token validation. Unauthenticated users attempting to access admin routes SHALL be redirected to the login page.
+
+#### Escenario: Unauthenticated access to admin panel
+- DADO user is not authenticated
+- CUANDO user navigates to /admin or any admin sub-route
+- THEN user is redirected to /login
+- AND a flash message indicates authentication is required
+
+#### Escenario: Authenticated access to admin panel
+- DADO user is authenticated with valid JWT
+- CUANDO user navigates to /admin
+- THEN admin panel loads normally
+- AND all calendar and appointment features function as specified
+
+### CAL-005 — Admin Session Persistence
+
+The admin panel SHALL maintain user session across page refreshes using refresh tokens stored in httpOnly cookies.
+
+#### Escenario: Session persistence on refresh
+- DADO user is authenticated with valid refresh token
+- CUANDO user refreshes the page
+- THEN system validates refresh token
+- AND issues new access token if needed
+- AND admin panel remains accessible without re-login
+
+#### Escenario: Session expiration
+- DADO user's refresh token has expired
+- CUANDO user refreshes the page
+- THEN system clears expired tokens
+- AND redirects to /login
+- AND displays session expired message
+
 ## Edge Cases
 
 | Caso | Comportamiento |
@@ -104,3 +138,7 @@ El modal DEBE tener un botón "Cancelar" que lo cierra sin cambios.
 | Cliente eliminado | Modal muestra "Cliente no disponible" |
 | Vista mes con 50+ citas | Calendario renderiza todas sin romper layout |
 | Toggle rápido entre modos | Cancelación de fetch anterior manejada por TanStack Query |
+| Token expires during active session | Axios interceptor silently refreshes token |
+| Multiple browser tabs | Auth state synchronized via shared cookies |
+| Admin manually clears cookies | Next navigation redirects to login |
+| Backend auth service unavailable | Admin panel shows maintenance message |

@@ -15,6 +15,7 @@ os.environ["ADMIN_EMAIL"] = "admin@test.com"
 os.environ["ADMIN_PASSWORD_HASH"] = "$2b$12$test_hash"  # placeholder
 os.environ["CORS_ORIGINS"] = "http://localhost:5173"
 os.environ["DATABASE_URL"] = "sqlite:///./test_endpoints.db"
+os.environ["LOGIN_RATE_LIMIT"] = "100/minute"
 
 from app.auth import get_password_hash
 from app.database import create_db_and_tables, engine

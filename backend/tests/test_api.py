@@ -6,6 +6,8 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-for-jwt-32-chars-long!"
+os.environ["LOGIN_RATE_LIMIT"] = "100/minute"
 if os.path.exists("test.db"):
     os.remove("test.db")
 
@@ -21,6 +23,24 @@ with Session(engine) as session:
     seed_default_schedule(session)
 
 client = TestClient(app)
+
+# ── Auth setup for protected endpoints ─────────────────────────────────
+# Create a real user and login so the TestClient has auth cookies
+from app.auth import get_password_hash
+from app.models import Usuario
+with Session(engine) as session:
+    hashed = get_password_hash("testpass123")
+    user = Usuario(
+        email="test-auth@test.com",
+        hashed_password=hashed,
+        role="admin",
+        is_active=True,
+    )
+    session.add(user)
+    session.commit()
+
+login_resp = client.post("/auth/login", json={"email": "test-auth@test.com", "password": "testpass123"})
+assert login_resp.status_code == 200, f"Auth setup failed: {login_resp.status_code} {login_resp.text}"
 
 
 def test_health():

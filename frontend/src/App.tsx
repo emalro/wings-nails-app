@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link } from '@tanstack/react-router'
 import { useConfig } from './hooks'
 import { useAuth } from './hooks/useAuth'
 
