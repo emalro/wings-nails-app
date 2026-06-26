@@ -88,7 +88,8 @@ def run_migration(session: Session) -> None:
         session.rollback()  # Column already exists — ignore
 
     # Set activo=1 for all rows (in case they were created before the column existed)
-    session.exec(text("UPDATE cliente SET activo = 1 WHERE activo IS NULL"))
+    activo_val = "TRUE" if is_postgres else "1"
+    session.exec(text(f"UPDATE cliente SET activo = {activo_val} WHERE activo IS NULL"))
     session.commit()
 
     # Copy existing telefono data to ClienteTelefono only if CT table is empty
