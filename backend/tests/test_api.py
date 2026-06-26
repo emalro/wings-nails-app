@@ -22,7 +22,7 @@ create_db_and_tables()
 with Session(engine) as session:
     seed_default_schedule(session)
 
-client = TestClient(app)
+client = TestClient(app, base_url="https://testserver")
 
 # ── Auth setup for protected endpoints ─────────────────────────────────
 # Create a real user and login so the TestClient has auth cookies
@@ -46,7 +46,158 @@ assert login_resp.status_code == 200, f"Auth setup failed: {login_resp.status_co
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    data = r.json()
+    assert data["status"] == "ok"
+    assert "version" in data
+
+
+def test_health_includes_version():
+    """Health endpoint should include version field."""
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert "version" in data
+    assert data["version"] == "0.1.0"
+
+
+# ---- INFRA MIGRATION: CORS configuration (T6.3) ----
+
+
+def test_cors_allows_configured_origins():
+    """CORS middleware should allow requests from configured origins."""
+    r = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    # FastAPI CORS middleware returns 200 for preflight if origin is allowed
+    assert r.status_code == 200
+    assert "access-control-allow-origin" in r.headers
+
+
+def test_cors_headers_on_get():
+    """GET /health should include CORS allow-origin header."""
+    r = client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert r.status_code == 200
+    assert "access-control-allow-origin" in r.headers
+
+
+# ---- INFRA MIGRATION: has_column helper (T1.1) ----
+
+
+def test_has_column_returns_true_for_existing_column():
+    """has_column('cliente', 'nombre') returns True — column exists."""
+    from app.main import has_column
+    from app.database import engine as db_engine
+    with Session(db_engine) as sess:
+        assert has_column(sess, "cliente", "nombre") is True
+
+
+def test_has_column_returns_false_for_missing_column():
+    """has_column('cliente', 'nonexistent_xyz_column') returns False."""
+    from app.main import has_column
+    from app.database import engine as db_engine
+    with Session(db_engine) as sess:
+        assert has_column(sess, "cliente", "nonexistent_xyz_column") is False
+
+
+# ---- INFRA MIGRATION: Cookie cross-origin attributes (T2.5) ----
+
+
+def test_login_cookies_have_correct_samesite_and_secure():
+    """Login response cookies must have correct SameSite and Secure based on environment."""
+    from app.auth import get_password_hash
+    from app.models import Usuario
+    from app.database import engine as db_engine
+    from app.main import COOKIE_SECURE, COOKIE_SAMESITE
+
+    # Save original cookies to restore later
+    original_cookies = dict(client.cookies)
+
+    # Create a fresh user for this test
+    with Session(db_engine) as sess:
+        hashed = get_password_hash("cookietest123")
+        user = Usuario(email="cookie-test@test.com", hashed_password=hashed, role="admin", is_active=True)
+        sess.add(user)
+        sess.commit()
+        user_id = user.id
+
+    try:
+        resp = client.post("/auth/login", json={"email": "cookie-test@test.com", "password": "cookietest123"})
+        assert resp.status_code == 200
+
+        # Access token cookie
+        at_cookie = resp.headers.get_list("set-cookie")
+        at_entries = [c for c in at_cookie if "access_token=" in c]
+        assert len(at_entries) >= 1, "access_token cookie not found"
+        at_raw = at_entries[0].lower()
+        assert f"samesite={COOKIE_SAMESITE}" in at_raw, f"Expected SameSite={COOKIE_SAMESITE} in access_token cookie: {at_raw}"
+        if COOKIE_SECURE:
+            assert "secure" in at_raw, f"Expected Secure flag in access_token cookie: {at_raw}"
+
+        # Refresh token cookie
+        rt_entries = [c for c in at_cookie if "refresh_token=" in c]
+        assert len(rt_entries) >= 1, "refresh_token cookie not found"
+        rt_raw = rt_entries[0].lower()
+        assert f"samesite={COOKIE_SAMESITE}" in rt_raw, f"Expected SameSite={COOKIE_SAMESITE} in refresh_token cookie: {rt_raw}"
+        if COOKIE_SECURE:
+            assert "secure" in rt_raw, f"Expected Secure flag in refresh_token cookie: {rt_raw}"
+    finally:
+        # Restore original cookies so other tests aren't affected
+        client.cookies.clear()
+        client.cookies.update(original_cookies)
+        with Session(db_engine) as sess:
+            user = sess.get(Usuario, user_id)
+            if user:
+                sess.delete(user)
+                sess.commit()
+
+
+def test_refresh_cookie_has_correct_samesite_and_secure():
+    """Refresh endpoint cookie must have correct SameSite and Secure based on environment."""
+    from app.auth import get_password_hash
+    from app.models import Usuario
+    from app.database import engine as db_engine
+    from app.main import COOKIE_SECURE, COOKIE_SAMESITE
+
+    # Save original cookies to restore later
+    original_cookies = dict(client.cookies)
+
+    with Session(db_engine) as sess:
+        hashed = get_password_hash("refreshtest123")
+        user = Usuario(email="refresh-cookie@test.com", hashed_password=hashed, role="admin", is_active=True)
+        sess.add(user)
+        sess.commit()
+        user_id = user.id
+
+    try:
+        # Login first — use a fresh TestClient to avoid polluting the shared cookie jar
+        from fastapi.testclient import TestClient as TC
+        fresh_client = TC(app, base_url="https://testserver")
+        login_resp = fresh_client.post("/auth/login", json={"email": "refresh-cookie@test.com", "password": "refreshtest123"})
+        assert login_resp.status_code == 200
+        refresh_token = login_resp.cookies.get("refresh_token")
+        assert refresh_token is not None
+
+        # Refresh — pass refresh_token cookie explicitly
+        refresh_resp = fresh_client.post("/auth/refresh", cookies={"refresh_token": refresh_token})
+        assert refresh_resp.status_code == 200
+
+        set_cookies = refresh_resp.headers.get_list("set-cookie")
+        at_entries = [c for c in set_cookies if "access_token=" in c]
+        assert len(at_entries) >= 1, "access_token cookie not set on refresh"
+        at_raw = at_entries[0].lower()
+        assert f"samesite={COOKIE_SAMESITE}" in at_raw, f"Expected SameSite={COOKIE_SAMESITE} in refresh access_token cookie: {at_raw}"
+        if COOKIE_SECURE:
+            assert "secure" in at_raw, f"Expected Secure flag in refresh access_token cookie: {at_raw}"
+    finally:
+        with Session(db_engine) as sess:
+            user = sess.get(Usuario, user_id)
+            if user:
+                sess.delete(user)
+                sess.commit()
 
 
 def test_create_and_list_client():
