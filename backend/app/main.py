@@ -75,9 +75,14 @@ def has_column(session: Session, table_name: str, column_name: str) -> bool:
 
 def run_migration(session: Session) -> None:
     """Startup migration: add activo column, copy telefono to ClienteTelefono, set activo=1."""
+    is_postgres = str(engine.url).startswith("postgresql")
+
     # Add activo column if it doesn't exist (existing DBs)
     try:
-        session.exec(text("ALTER TABLE cliente ADD COLUMN activo BOOLEAN NOT NULL DEFAULT 1"))
+        if is_postgres:
+            session.exec(text("ALTER TABLE cliente ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE"))
+        else:
+            session.exec(text("ALTER TABLE cliente ADD COLUMN activo BOOLEAN NOT NULL DEFAULT 1"))
         session.commit()
     except Exception:
         session.rollback()  # Column already exists — ignore
