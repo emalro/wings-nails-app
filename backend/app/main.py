@@ -128,11 +128,13 @@ def seed_admin_user(session: Session) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     create_db_and_tables()
-    with Session(engine) as session:
-        run_migration(session)
-        seed_default_config(session)
-        seed_default_schedule(session)
-        seed_admin_user(session)
+    for fn in [run_migration, seed_default_config, seed_default_schedule, seed_admin_user]:
+        try:
+            with Session(engine) as session:
+                fn(session)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Startup {fn.__name__} failed: {e}")
     yield
 
 
