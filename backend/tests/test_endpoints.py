@@ -26,7 +26,7 @@ from app.main import app
 create_db_and_tables()
 
 # Create test client
-client = TestClient(app, raise_server_exceptions=False)
+client = TestClient(app, raise_server_exceptions=False, base_url="https://testserver")
 
 
 def setup_test_user():
