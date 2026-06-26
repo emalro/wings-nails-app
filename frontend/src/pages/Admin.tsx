@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppointment, useUpdateAppointmentStatus, useCreateService, useUpdateService, useDeleteService, useDeleteAppointment, useWeeklySchedule, useUpdateWeeklySchedule, useExceptions, useCreateException, useDeleteException } from '../hooks'
+import { useAuth } from '../hooks/useAuth'
 import CalendarView from '../components/CalendarView'
 import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
@@ -48,6 +50,19 @@ type Service = {
 }
 
 export default function Admin() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate({ to: '/login', search: { reason: 'auth-required' } })
+    }
+  }, [authLoading, isAuthenticated, navigate])
+
+  if (authLoading || !isAuthenticated) {
+    return null
+  }
+
   const [showInactive, setShowInactive] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedCita, setSelectedCita] = useState<Appointment | null>(null)
