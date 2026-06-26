@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useServices, useCreateClient, useClientSearch, useCreateManualAppointment } from '../hooks'
+import { useFormValidation } from '../hooks/useFormValidation'
+import FieldError from './FieldError'
 import type { ClienteRead } from '../api'
 
 interface ManualAppointmentModalProps {
@@ -75,6 +77,50 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   const [metodoPago, setMetodoPago] = useState('Transferencia')
   const [error, setError] = useState<string | null>(null)
 
+  const form = useFormValidation({
+    cliente: {
+      initial: false,
+      rules: [
+        { validate: (v: boolean) => v, message: 'Seleccioná una clienta' },
+      ],
+    },
+    fecha: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.length > 0, message: 'La fecha es requerida' },
+        {
+          validate: (v: string) => {
+            if (!v) return true // handled by required rule
+            const today = new Date(new Date().toDateString())
+            return new Date(v) > today
+          },
+          message: 'La fecha debe ser futura',
+        },
+      ],
+    },
+    hora: {
+      initial: '',
+      rules: [
+        { validate: (v: string) => v.length > 0, message: 'La hora es requerida' },
+      ],
+    },
+    servicios: {
+      initial: false,
+      rules: [
+        { validate: (v: boolean) => v, message: 'Seleccioná al menos un servicio' },
+      ],
+    },
+  })
+
+  // Sync complex state into form validation
+  useEffect(() => {
+    form.setField('cliente', !!selectedClient)
+  }, [selectedClient])
+
+  useEffect(() => {
+    form.setField('servicios', selectedServiceIds.length > 0)
+  }, [selectedServiceIds])
+
   const { data: searchResults, isLoading: searchLoading } = useClientSearch(debouncedQuery)
 
   // Debounce search query (300ms)
@@ -118,6 +164,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
       setEstadoCita(null)
       setMetodoPago('Transferencia')
       setError(null)
+      form.reset()
     }
   }, [isOpen])
 
@@ -178,8 +225,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
       selectedClient &&
       selectedServiceIds.length > 0 &&
       appointmentDate &&
-      appointmentTime &&
-      getSelectedServices().length > 0
+      appointmentTime
     )
   }
 
@@ -192,7 +238,8 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   }
 
   async function handleSubmit() {
-    if (!isFormValid() || !selectedClient) return
+    if (!form.validate()) return
+    if (!selectedClient) return
     setError(null)
 
     const selectedServices = getSelectedServices()
