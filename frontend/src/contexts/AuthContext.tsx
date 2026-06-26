@@ -30,7 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await api.get('/auth/me')
+        // Skip interceptor to avoid redirect loop on initial check
+        const response = await api.get('/auth/me', { skipAuthRefresh: true } as any)
         setUser(response.data)
         resolveAuthPromise({ user: response.data, isAuthenticated: true, isLoading: false })
       } catch {

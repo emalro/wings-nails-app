@@ -13,7 +13,7 @@ Client-side validation for booking, admin, and login forms with inline field err
 
 ### VAL-001 — Appointment Form Validation (MUST)
 
-The booking form MUST validate: client selection (required), date/time (required, must be future), at least one service (required), observaciones (required, max 500 chars).
+The booking form MUST validate: client selection (required), date/time (required, must be future), at least one service (required), observaciones (optional, max 500 chars when provided).
 
 #### Scenario: Missing client
 

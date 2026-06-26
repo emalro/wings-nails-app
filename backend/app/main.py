@@ -1,11 +1,12 @@
 import os
+from dotenv import load_dotenv
+load_dotenv(override=True)
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -18,6 +19,8 @@ from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Conf
 from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 def seed_default_config(session: Session) -> None:
     existing = session.get(Configuracion, 1)
@@ -50,6 +53,26 @@ def seed_default_schedule(session: Session) -> None:
     session.commit()
 
 
+def has_column(session: Session, table_name: str, column_name: str) -> bool:
+    """Check if a column exists in a table — works on both SQLite and PostgreSQL."""
+    try:
+        result = session.execute(
+            text("SELECT COUNT(*) FROM information_schema.columns WHERE table_name = :table AND column_name = :col"),
+            {"table": table_name, "col": column_name},
+        )
+        count = result.scalar()
+        if count and count > 0:
+            return True
+    except Exception:
+        pass
+    # Fallback for SQLite (information_schema not available)
+    try:
+        pragma = session.exec(text(f"PRAGMA table_info({table_name})")).all()
+        return any(row[1] == column_name for row in pragma)
+    except Exception:
+        return False
+
+
 def run_migration(session: Session) -> None:
     """Startup migration: add activo column, copy telefono to ClienteTelefono, set activo=1."""
     # Add activo column if it doesn't exist (existing DBs)
@@ -68,8 +91,7 @@ def run_migration(session: Session) -> None:
     existing_ct = session.exec(select(ClienteTelefono)).all()
     if len(existing_ct) == 0:
         # Check if the old telefono column exists before querying it
-        pragma = session.exec(text("PRAGMA table_info(cliente)")).all()
-        has_telefono_col = any(row[1] == "telefono" for row in pragma)
+        has_telefono_col = has_column(session, "cliente", "telefono")
         if has_telefono_col:
             rows = session.exec(text("SELECT id, telefono FROM cliente WHERE telefono IS NOT NULL AND telefono != ''")).all()
             for row in rows:
@@ -115,7 +137,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -132,7 +154,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "0.1.0"}
 
 
 # ── Auth Endpoints ──────────────────────────────────────────────────────
@@ -158,7 +180,8 @@ def login(request: Request, login_data: LoginRequest, session: Session = Depends
         key="access_token",
         value=access_token,
         httponly=True,
-        samesite="strict",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         max_age=1800,  # 30 minutes
         path="/",
     )
@@ -166,7 +189,8 @@ def login(request: Request, login_data: LoginRequest, session: Session = Depends
         key="refresh_token",
         value=refresh_token,
         httponly=True,
-        samesite="strict",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         max_age=604800,  # 7 days
         path="/",
     )
@@ -205,7 +229,8 @@ def refresh(request: Request, session: Session = Depends(get_session)):
         key="access_token",
         value=new_access_token,
         httponly=True,
-        samesite="strict",
+        samesite=COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         max_age=1800,
         path="/",
     )
@@ -219,7 +244,7 @@ def get_me(user: Usuario = Depends(get_current_user)):
 
 
 @app.get("/config", response_model=ConfiguracionRead)
-def get_config(current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
+def get_config(session: Session = Depends(get_session)):
     config = session.get(Configuracion, 1)
     if not config:
         config = Configuracion(id=1)
@@ -579,7 +604,7 @@ def delete_service(service_id: int, current_user: Usuario = Depends(get_current_
 
 
 @app.get("/services", response_model=list[ServicioRead])
-def list_services(all: bool = False, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
+def list_services(all: bool = False, session: Session = Depends(get_session)):
     statement = select(Servicio)
     if not all:
         statement = statement.where(Servicio.activo == True)
@@ -770,7 +795,7 @@ def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_
 
 
 @app.get("/busy_slots")
-def get_busy_slots(date_str: str, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
+def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
     try:
         target_date = date.fromisoformat(date_str)
     except ValueError:
@@ -902,7 +927,7 @@ def delete_exception(exception_id: int, current_user: Usuario = Depends(get_curr
 
 
 @app.get("/schedule/effective", response_model=EffectiveHoursResponse)
-def get_effective_hours(date: str = Query(alias="date"), current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
+def get_effective_hours(date: str = Query(alias="date"), session: Session = Depends(get_session)):
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     except (ValueError, TypeError):
@@ -939,17 +964,3 @@ def get_effective_hours(date: str = Query(alias="date"), current_user: Usuario =
 
     # 3. Closed
     return EffectiveHoursResponse(abierto=False)
-
-
-# Serve built frontend assets (JS/CSS bundles with hashed names)
-app.mount("/assets", StaticFiles(directory="static/assets"), name="assets")
-
-# SPA fallback: serve index.html for all non-API, non-asset routes
-# This must come AFTER all API routes so explicit routes take priority
-@app.get("/")
-async def serve_root():
-    return FileResponse("static/index.html")
-
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    return FileResponse("static/index.html")

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from '../hooks/useAuth'
 import { useFormValidation } from '../hooks/useFormValidation'
 import FieldError from '../components/FieldError'
@@ -22,7 +21,6 @@ export default function Login() {
   const [flash, setFlash] = useState<{ text: string; color: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { login } = useAuth()
-  const navigate = useNavigate()
 
   const form = useFormValidation({
     email: {
@@ -58,7 +56,7 @@ export default function Login() {
 
     try {
       await login(form.values.email.trim(), form.values.password)
-      navigate({ to: '/admin' })
+      window.location.href = '/admin'
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Credenciales inválidas'

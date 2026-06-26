@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { Outlet, Link } from '@tanstack/react-router'
 import { useConfig } from './hooks'
 import { useAuth } from './hooks/useAuth'
+import { SkeletonLoader } from './components/SkeletonLoader'
 
 function whatsappUrl(number: string): string {
   if (!number) return '#'
@@ -38,7 +39,7 @@ function IconFacebook({ size = 22 }: { size?: number }) {
 
 export default function App() {
   const { data: config } = useConfig()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
 
   const businessName = config?.business_name || 'Nails Studio'
   const fbUrl = config?.facebook_url || '#'
@@ -49,6 +50,24 @@ export default function App() {
   useEffect(() => {
     document.title = businessName
   }, [businessName])
+
+  if (authLoading) {
+    return (
+      <div className="page-wrap">
+        <nav className="navbar">
+          <div className="navbar-inner">
+            <div className="navbar-brand">
+              <span className="navbar-brand-logo">✦</span>
+              <SkeletonLoader lines={1} className="w-32 inline-block" />
+            </div>
+          </div>
+        </nav>
+        <main className="page-main">
+          <SkeletonLoader variant="card" className="max-w-2xl mx-auto mt-8" />
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="page-wrap">

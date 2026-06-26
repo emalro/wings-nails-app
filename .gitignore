@@ -11,3 +11,4 @@ test.db
 *.sqlite3
 .DS_Store
 *.log
+backend/static/

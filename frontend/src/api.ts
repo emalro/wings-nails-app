@@ -1,11 +1,12 @@
 import axios from 'axios'
 
-// Prod: misma origen (FastAPI sirve SPA + API) → URL relativa
-// Dev: setear VITE_API_URL en .env (ej: http://localhost:8000)
+// Dev: Vite proxy routes /auth, /services, etc. to localhost:8000 (same-origin)
+// Prod: set VITE_API_URL to Render backend URL
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export const api = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -66,6 +67,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+
+    // Skip refresh for initial auth check or explicit skip
+    if (originalRequest.skipAuthRefresh) {
+      return Promise.reject(error)
+    }
 
     // If 401 and not already retrying, attempt token refresh
     if (error.response?.status === 401 && !originalRequest._retry) {

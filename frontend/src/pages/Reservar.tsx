@@ -73,7 +73,6 @@ export default function Reservar() {
     observaciones: {
       initial: '',
       rules: [
-        { validate: (v: string) => v.trim().length > 0, message: 'Las observaciones son obligatorias.' },
         { validate: (v: string) => v.trim().length <= 500, message: 'Máximo 500 caracteres.' },
       ],
     },
