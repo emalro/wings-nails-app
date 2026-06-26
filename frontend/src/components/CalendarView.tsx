@@ -96,7 +96,10 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
     : undefined
 
   const events: CalendarEvent[] = appointments.map((cita) => {
-    const start = new Date(cita.fecha_hora_cita)
+    // REQ-DCO-001/003: parse naive datetime string without UTC conversion
+    const [datePart, timePart] = cita.fecha_hora_cita.split('T')
+    const [hours, minutes] = (timePart || '00:00').split(':').map(Number)
+    const start = new Date(parseInt(datePart.slice(0,4)), parseInt(datePart.slice(5,7)) - 1, parseInt(datePart.slice(8,10)), hours, minutes)
     const end = new Date(start.getTime() + cita.duracion_total_minutos * 60 * 1000)
     return {
       title: cita.cliente_nombre || `Cita #${cita.id}`,

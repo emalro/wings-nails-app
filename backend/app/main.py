@@ -300,6 +300,77 @@ def _build_cliente_read_response(client: Cliente, session: Session) -> dict:
     return _attach_telefonos(client, session)
 
 
+def get_effective_hours_logic(target_date: date, session: Session) -> EffectiveHoursResponse:
+    """Get effective hours for a date — reusable logic shared with the endpoint."""
+    # 1. Check exception
+    exc = session.exec(
+        select(ExcepcionHorario).where(ExcepcionHorario.fecha == target_date)
+    ).first()
+    if exc:
+        if exc.cerrado:
+            return EffectiveHoursResponse(abierto=False)
+        return EffectiveHoursResponse(
+            abierto=True,
+            hora_apertura=exc.hora_apertura,
+            hora_cierre=exc.hora_cierre,
+        )
+
+    # 2. Check weekly schedule
+    python_weekday = target_date.weekday()  # 0=Mon..6=Sun
+    schema_day = _python_weekday_to_schema(python_weekday)
+    weekly = session.exec(
+        select(HorarioSemanal).where(HorarioSemanal.dia_semana == schema_day)
+    ).first()
+    if weekly and weekly.activo:
+        return EffectiveHoursResponse(
+            abierto=True,
+            hora_apertura=weekly.hora_apertura,
+            hora_cierre=weekly.hora_cierre,
+        )
+
+    # 3. Closed
+    return EffectiveHoursResponse(abierto=False)
+
+
+def validate_appointment_hours(
+    fecha_hora_cita: datetime,
+    service_duration_minutes: int,
+    session: Session,
+) -> None:
+    """Validate appointment falls within business hours with 1h grace period.
+
+    Raises HTTPException(422) if invalid.
+    REQ-HOR-010: appointment must be within opening..closing (at closing is invalid).
+    REQ-HOR-011: start + duration <= closing + 1 hour.
+    """
+    effective = get_effective_hours_logic(fecha_hora_cita.date(), session)
+
+    if not effective.abierto:
+        raise HTTPException(422, detail="El local está cerrado este día")
+
+    opening = datetime.strptime(effective.hora_apertura, "%H:%M").time()
+    closing = datetime.strptime(effective.hora_cierre, "%H:%M").time()
+
+    appointment_time = fecha_hora_cita.time()
+
+    # REQ-HOR-010: must be within opening..closing (at closing is invalid)
+    if appointment_time < opening or appointment_time >= closing:
+        raise HTTPException(
+            422,
+            detail=f"El horario debe estar entre {effective.hora_apertura} y {effective.hora_cierre}",
+        )
+
+    # REQ-HOR-011: start + duration <= closing + 1 hour
+    appointment_end = fecha_hora_cita + timedelta(minutes=service_duration_minutes)
+    grace_closing = datetime.combine(fecha_hora_cita.date(), closing) + timedelta(hours=1)
+
+    if appointment_end > grace_closing:
+        raise HTTPException(
+            422,
+            detail=f"El servicio se extiende demasiado más allá del horario de cierre ({effective.hora_cierre})",
+        )
+
+
 # ── Client Endpoints ─────────────────────────────────────────────────────────
 
 
@@ -671,6 +742,10 @@ def create_appointment(appointment: CitaCreate, current_user: Usuario = Depends(
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
     appointment_duration = sum(item.duracion_minutos for item in appointment.servicios)
+
+    # REQ-HOR-010/011: validate business hours before conflict check
+    validate_appointment_hours(appointment.fecha_hora_cita, appointment_duration, session)
+
     conflict = find_conflicting_appointment(appointment.fecha_hora_cita, appointment_duration, session)
     if conflict:
         raise HTTPException(status_code=409, detail="El horario elegido ya está ocupado. Por favor elegí otra franja.")
@@ -733,8 +808,11 @@ def update_appointment(appointment_id: int, appointment: CitaUpdate, current_use
         # Calculate new duration for conflict check
         new_duration = sum(s.duracion_minutos for s in servicios)
 
-        # Check conflicts if date changed or services changed
+        # REQ-HOR-010/011: validate business hours when date or services change
         check_date = update_data.get("fecha_hora_cita", cita.fecha_hora_cita)
+        validate_appointment_hours(check_date, new_duration, session)
+
+        # Check conflicts if date changed or services changed
         conflict = find_conflicting_appointment(check_date, new_duration, session, exclude_id=appointment_id)
         if conflict:
             raise HTTPException(status_code=409, detail="El horario elegido ya está ocupado. Por favor elegí otra franja.")
@@ -761,6 +839,8 @@ def update_appointment(appointment_id: int, appointment: CitaUpdate, current_use
         # Conflict check if only changing date
         if "fecha_hora_cita" in update_data:
             current_duration = calculate_duration_for_cita(cita, session)
+            # REQ-HOR-010/011: validate business hours when date changes
+            validate_appointment_hours(update_data["fecha_hora_cita"], current_duration, session)
             conflict = find_conflicting_appointment(update_data["fecha_hora_cita"], current_duration, session, exclude_id=appointment_id)
             if conflict:
                 raise HTTPException(status_code=409, detail="El horario elegido ya está ocupado. Por favor elegí otra franja.")
