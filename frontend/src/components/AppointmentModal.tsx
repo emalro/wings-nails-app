@@ -204,15 +204,11 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               <p style={{ margin: '4px 0' }}><strong>Teléfono:</strong> {cita.id_cliente}</p>
               <p style={{ margin: '4px 0' }}>
                 <strong>Fecha:</strong>{' '}
-                {new Date(cita.fecha_hora_cita).toLocaleDateString('es-AR', {
-                  day: '2-digit', month: '2-digit', year: 'numeric',
-                })}
+                {cita.fecha_hora_cita.split('T')[0].split('-').reverse().join('/')}
               </p>
               <p style={{ margin: '4px 0' }}>
                 <strong>Horario:</strong>{' '}
-                {new Date(cita.fecha_hora_cita).toLocaleTimeString('es-AR', {
-                  hour: '2-digit', minute: '2-digit',
-                })}
+                {cita.fecha_hora_cita.split('T')[1]?.substring(0, 5) || '--:--'}
               </p>
               <p style={{ margin: '4px 0' }}>
                 <strong>Duración:</strong> {cita.duracion_total_minutos} min

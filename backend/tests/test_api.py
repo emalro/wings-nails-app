@@ -217,11 +217,19 @@ _BASE_TEST_DATE = datetime(2026, 7, 1, 10, 0, 0)
 
 
 def _unique_date_offset():
-    """Return a unique (days, minutes) offset for data isolation."""
+    """Return a unique (days, minutes) offset for data isolation.
+    Skips weekends so appointments always land on business days."""
     global _test_counter
     _test_counter += 1
     # Each test gets its own day to avoid any cross-test overlap
     days = _test_counter - 1
+    # Skip weekends: advance past Saturday (5) and Sunday (6)
+    candidate = _BASE_TEST_DATE + timedelta(days=days)
+    weekday = candidate.weekday()  # 0=Mon..6=Sun
+    if weekday == 5:  # Saturday → skip to Monday (+2 days)
+        days += 2
+    elif weekday == 6:  # Sunday → skip to Monday (+1 day)
+        days += 1
     minutes = 0
     return days, minutes
 
@@ -882,7 +890,7 @@ def test_create_appointment_with_confirmado():
     # Use helper that creates client + service
     client_id, service_id, _ = _new_test_client_service()
 
-    appointment_time = _BASE_TEST_DATE + timedelta(days=200, minutes=0)
+    appointment_time = _BASE_TEST_DATE + timedelta(days=201, minutes=0)
     payload = {
         "id_cliente": client_id,
         "fecha_hora_cita": appointment_time.isoformat(),
@@ -908,7 +916,7 @@ def test_create_appointment_default_pendiente():
     """CMC-002: POST without estado_cita creates appointment with Pendiente."""
     client_id, service_id, _ = _new_test_client_service()
 
-    appointment_time = _BASE_TEST_DATE + timedelta(days=201, minutes=0)
+    appointment_time = _BASE_TEST_DATE + timedelta(days=203, minutes=0)
     payload = {
         "id_cliente": client_id,
         "fecha_hora_cita": appointment_time.isoformat(),
@@ -1414,3 +1422,347 @@ def test_busy_slots_and_conflict_detection():
     conflict_resp = client.post("/appointments", json=conflicting_payload)
     assert conflict_resp.status_code == 409
     assert "ocupado" in conflict_resp.json()["detail"]
+
+
+# ── REQ-DCO-001: Naive datetime serialization ─────────────────────────────
+
+def test_appointment_datetime_no_z_suffix():
+    """REQ-DCO-001: Backend MUST serialize datetime WITHOUT Z suffix."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    appointment_time = _BASE_TEST_DATE + timedelta(days=300, minutes=0)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appointment_time.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+
+    # fecha_hora_cita MUST NOT end with 'Z'
+    fecha_str = data["fecha_hora_cita"]
+    assert not fecha_str.endswith("Z"), f"fecha_hora_cita has Z suffix: {fecha_str}"
+    # fecha_hora_cita MUST be a naive ISO string
+    assert "T" in fecha_str, f"fecha_hora_cita is not ISO format: {fecha_str}"
+
+    # Also verify via GET
+    appt_id = data["id"]
+    r_get = client.get("/appointments")
+    assert r_get.status_code == 200
+    appointments = r_get.json()
+    target = next(a for a in appointments if a["id"] == appt_id)
+    fecha_get = target["fecha_hora_cita"]
+    assert not fecha_get.endswith("Z"), f"GET response has Z suffix: {fecha_get}"
+
+
+def test_appointment_datetime_preserves_naive_input():
+    """REQ-DCO-002: Frontend sends naive datetime, backend stores it unchanged."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # Send a naive datetime string (no Z)
+    naive_str = "2026-12-01T10:30:00"
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": naive_str,
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+
+    # Response must contain the same time, no Z
+    assert "10:30" in data["fecha_hora_cita"]
+    assert not data["fecha_hora_cita"].endswith("Z")
+
+
+# ── REQ-HOR-010/011: Business hours & duration validation ─────────────────
+
+def test_create_appointment_within_business_hours():
+    """REQ-HOR-010: Appointment within business hours succeeds."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # 2026-07-01 is a Wednesday — default schedule: 09:00–18:00
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-06T10:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+
+
+def test_create_appointment_before_opening_rejected():
+    """REQ-HOR-010: Appointment before opening returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-07T08:30:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 422
+    assert "horario" in r.json()["detail"].lower() or "hora" in r.json()["detail"].lower()
+
+
+def test_create_appointment_at_closing_rejected():
+    """REQ-HOR-010: Appointment at closing time returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-08T18:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 422
+    assert "horario" in r.json()["detail"].lower() or "hora" in r.json()["detail"].lower()
+
+
+def test_create_appointment_closed_day_rejected():
+    """REQ-HOR-010: Appointment on a closed day returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # 2027-01-10 is a Sunday — default schedule: closed
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-10T10:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 422
+    assert "cerrado" in r.json()["detail"].lower()
+
+
+def test_create_appointment_service_exceeds_grace_rejected():
+    """REQ-HOR-011: Service extending >1h past closing returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # 17:00 + 150 min = 19:30, closing 18:00 + 1h grace = 19:00 → exceeds
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-12T17:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 150,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 422
+    assert "cierre" in r.json()["detail"].lower() or "servicio" in r.json()["detail"].lower()
+
+
+def test_create_appointment_service_within_grace_succeeds():
+    """REQ-HOR-011: Service extending exactly 1h past closing succeeds (boundary)."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # 17:00 + 120 min = 19:00, closing 18:00 + 1h grace = 19:00 → exactly at boundary
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-13T17:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 120,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+
+
+def test_create_appointment_short_service_near_closing_within_grace():
+    """REQ-HOR-011: 17:45 + 30 min = 18:15, within 1h grace of 18:00 → succeeds."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-14T17:45:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 30,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+
+
+def test_create_appointment_short_service_exceeds_grace():
+    """REQ-HOR-011: 17:31 + 90 min = 19:01 > 19:00 grace limit → 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-15T17:31:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 90,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 422
+
+
+def test_create_appointment_last_valid_slot():
+    """REQ-HOR-011: 17:30 + 30 min = 18:00, exactly at grace limit → succeeds."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # 2027-01-19 is Monday — default schedule: 09:00–18:00
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-01-19T17:30:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 30,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+
+
+def test_update_appointment_date_change_validates_business_hours():
+    """REQ-HOR-010: Updating appointment to outside business hours returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # Create appointment at valid time
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-02-02T10:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    appt_id = r.json()["id"]
+
+    # Try to move it to before opening
+    r = client.patch(f"/appointments/{appt_id}", json={"fecha_hora_cita": "2027-02-02T08:00:00"})
+    assert r.status_code == 422
+
+
+def test_update_appointment_services_change_validates_business_hours():
+    """REQ-HOR-011: Updating services that extend past grace returns 422."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    # Create appointment at valid time
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2027-02-03T17:00:00",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    appt_id = r.json()["id"]
+
+    # Try to add a long service that exceeds grace
+    r = client.patch(f"/appointments/{appt_id}", json={
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 150,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ]
+    })
+    assert r.status_code == 422

@@ -41,8 +41,21 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
     const endHour = parseInt(effectiveHours.hora_cierre!.split(':')[0])
     const intervalMinutes = 30
 
+    // REQ-BKG-006: filter out past slots when selected date is today
+    const now = new Date()
+    const isToday = date.getFullYear() === now.getFullYear() &&
+      date.getMonth() === now.getMonth() &&
+      date.getDate() === now.getDate()
+    const currentHour = now.getHours()
+    const currentMinute = now.getMinutes()
+
     for (let hour = startHour; hour < endHour; hour++) {
       for (let minute = 0; minute < 60; minute += intervalMinutes) {
+        // REQ-BKG-006: skip past slots for today
+        if (isToday && (hour < currentHour || (hour === currentHour && minute < currentMinute))) {
+          continue
+        }
+
         const slotStart = new Date(date)
         slotStart.setHours(hour, minute, 0, 0)
         const slotEnd = new Date(slotStart)
