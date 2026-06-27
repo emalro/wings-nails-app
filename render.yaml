@@ -9,7 +9,7 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "https://wings-nails.vercel.app"
+        value: "https://wings-nails-app.vercel.app"
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD_HASH
