@@ -311,7 +311,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="content" style={{ paddingBottom: 48 }}>
+    <div className="content pb-12">
       <div className="page-header">
         <h2>Panel Administrativo</h2>
         <p>Gestioná servicios, turnos y estados.</p>
@@ -320,18 +320,18 @@ export default function Admin() {
       {error && <div className="status-notice error">{error}</div>}
 
       {/* ── AGENDA ── */}
-      <section style={{ marginTop: 32 }}>
-        <div className="section-header" style={{ textAlign: 'left' }}>
+      <section className="mt-8">
+        <div className="section-header text-left">
           <span className="overline">Turnos</span>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>Agenda visual</h2>
+          <h2 className="font-[var(--font-display)] text-1.4rem mt-1">Agenda visual</h2>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: '.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Filtrar por estado:</span>
+        <div className="flex justify-between mb-3 gap-3 flex-wrap">
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-semibold text-[var(--text-secondary)]">Filtrar por estado:</span>
             <select
               value={appointmentStatusFilter}
               onChange={(e) => setAppointmentStatusFilter(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontSize: '.85rem' }}
+              className="py-1.5 px-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm"
             >
               <option value="">Todos</option>
               <option value="Pendiente">Pendiente</option>
@@ -351,8 +351,8 @@ export default function Admin() {
         </div>
 
         {filteredAppointments.length > 0 && loading === false && (
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '1rem', marginBottom: 12 }}>Lista de turnos</h3>
+          <div className="mb-6">
+            <h3 className="font-[var(--font-display)] text-base mb-3">Lista de turnos</h3>
             <DataTable
               columns={[
                 { key: 'cliente_nombre', label: 'Cliente', sortable: true, filterable: true },
@@ -416,7 +416,7 @@ export default function Admin() {
       </section>
 
       {/* ── HORARIOS ── */}
-      <details open className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+      <details open className="admin-card collapsible-card mt-6">
         <summary>
           Horarios de Atención
           <span className="chevron">›</span>
@@ -434,7 +434,7 @@ export default function Admin() {
       </details>
 
       {/* ── EXCEPCIONES ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 16 }}>
+      <details className="admin-card collapsible-card mt-4">
         <summary>
           Excepciones
           <span className="chevron">›</span>
@@ -460,7 +460,7 @@ export default function Admin() {
       </details>
 
       {/* ── CONFIGURACIÓN DEL NEGOCIO ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+      <details className="admin-card collapsible-card mt-6">
         <summary>
           Configuración del negocio
           <span className="chevron">›</span>
@@ -478,7 +478,7 @@ export default function Admin() {
       </details>
 
       {/* ── CLIENTAS ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+      <details className="admin-card collapsible-card mt-6">
         <summary>
           Clientas
           <span className="chevron">›</span>
@@ -489,7 +489,7 @@ export default function Admin() {
       </details>
 
       {/* ── SERVICIOS ── */}
-      <details className="admin-card collapsible-card" style={{ marginTop: 24 }}>
+      <details className="admin-card collapsible-card mt-6">
         <summary>
           Servicios
           <span className="chevron">›</span>
