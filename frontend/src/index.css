@@ -58,6 +58,21 @@
     --radius-lg: 20px;
     --content-max: 1120px;
 
+    /* ── Compatibility aliases ──
+     * The component JSX still uses the previous names (--muted, --border,
+     * --text, --bg, --primary-light, --primary-dark) for now. The proposal
+     * and design explicitly defer the token-usage refactor (text-[var(x)]
+     * -> bg-primary) to a separate change, so we expose the old names as
+     * aliases pointing at the new semantic tokens. Removing these aliases
+     * is part of the follow-up refactor. */
+    --muted: var(--on-surface-variant);
+    --border: var(--outline-variant);
+    --text-secondary: var(--on-surface-variant);
+    --text: var(--on-background);
+    --bg: var(--background);
+    --primary-light: var(--primary-container);
+    --primary-dark: var(--tertiary);
+
     /* ── Shadow tints (rose, NOT wine) ── */
     --shadow-sm: 0 2px 8px rgba(184, 87, 118, 0.08);
     --shadow-md: 0 8px 24px rgba(184, 87, 118, 0.10);
