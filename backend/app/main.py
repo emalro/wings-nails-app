@@ -674,7 +674,7 @@ def delete_service(service_id: int, current_user: Usuario = Depends(get_current_
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
 
     # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
-    session.exec(text("DELETE FROM citaservicio WHERE servicio_id = :id"), {"id": service_id})
+    session.execute(text("DELETE FROM citaservicio WHERE servicio_id = :id"), {"id": service_id})
     session.delete(service)
     session.commit()
     return {"ok": True}
@@ -872,7 +872,7 @@ def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
     # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
-    session.exec(text("DELETE FROM citaservicio WHERE cita_id = :id"), {"id": appointment_id})
+    session.execute(text("DELETE FROM citaservicio WHERE cita_id = :id"), {"id": appointment_id})
     session.delete(cita)
     session.commit()
     return {"ok": True}
