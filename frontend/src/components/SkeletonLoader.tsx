@@ -6,6 +6,8 @@ interface SkeletonLoaderProps {
   variant?: 'text' | 'card' | 'table'
 }
 
+const WIDTH_CLASSES = ['w-[85%]', 'w-[75%]', 'w-[65%]', 'w-[55%]', 'w-[45%]', 'w-[35%]', 'w-[25%]', 'w-[15%]']
+
 export function SkeletonLoader({ lines = 3, className = '', variant = 'text' }: SkeletonLoaderProps) {
   const baseClass = 'animate-pulse bg-gray-200 dark:bg-gray-700 rounded'
 
@@ -36,8 +38,7 @@ export function SkeletonLoader({ lines = 3, className = '', variant = 'text' }: 
       {Array.from({ length: lines }).map((_, i) => (
         <div
           key={i}
-          className={`${baseClass} h-4`}
-          style={{ width: `${85 - i * 10}%` }}
+          className={`${baseClass} h-4 ${WIDTH_CLASSES[i] || 'w-full'}`}
         />
       ))}
     </div>
