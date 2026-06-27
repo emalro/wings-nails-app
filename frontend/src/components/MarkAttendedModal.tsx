@@ -42,38 +42,38 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
   }
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="m-0 text-[1.25rem] font-[var(--font-display)]">
             Marcar como Asistido
           </h3>
-          <button type="button" onClick={onClose} style={closeBtnStyle}>&times;</button>
+          <button type="button" onClick={onClose} className="bg-none border-none text-1.5rem cursor-pointer leading-none py-1 px-2 rounded">&times;</button>
         </div>
 
-        <p style={{ marginBottom: 16, color: 'var(--text-secondary, #64748b)' }}>
+        <p className="mb-4 text-[var(--text-secondary)]">
           {cita.cliente_nombre || `Cliente #${cita.id_cliente}`} — {new Date(cita.fecha_hora_cita).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
         </p>
 
-        <div style={{ marginBottom: 16 }}>
-          <div style={rowStyle}>
+        <div className="mb-4">
+          <div className="flex justify-between items-center py-1 text-[0.95rem]">
             <span>Precio total</span>
-            <span style={{ fontWeight: 600 }}>${cita.precio_historico_cobrado.toFixed(2)}</span>
+            <span className="font-semibold">${cita.precio_historico_cobrado.toFixed(2)}</span>
           </div>
-          <div style={rowStyle}>
+          <div className="flex justify-between items-center py-1 text-[0.95rem]">
             <span>Seña pagada</span>
-            <span style={{ fontWeight: 600, color: 'var(--text-secondary, #64748b)' }}>
+            <span className="font-semibold text-[var(--text-secondary)]">
               -${cita.sena_historica_pagada.toFixed(2)}
             </span>
           </div>
-          <div style={{ ...rowStyle, borderTop: '1.5px solid var(--border, #e2e8f0)', paddingTop: 8 }}>
+          <div className="flex justify-between items-center py-1 border-t border-[var(--border)] pt-2 text-[0.95rem]">
             <span>Saldo restante</span>
-            <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>${balance.toFixed(2)}</span>
+            <span className="font-bold text-[1.1rem]">${balance.toFixed(2)}</span>
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ display: 'block', marginBottom: 6, fontWeight: 500, fontSize: '0.9rem' }}>
+        <div className="mb-4">
+          <label className="block mb-1.5 font-medium text-[0.9rem]">
             Monto recibido en caja
           </label>
           <input
@@ -82,29 +82,20 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
             min={0}
             value={monto}
             onChange={(e) => setMonto(Number(e.target.value))}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              border: '1.5px solid var(--border, #e2e8f0)',
-              borderRadius: '6px',
-              fontSize: '1rem',
-              fontWeight: 600,
-              boxSizing: 'border-box',
-            }}
+            className="modal-input font-semibold text-base"
           />
         </div>
 
         {error && (
-          <div style={{ color: '#EF4444', fontSize: '0.9rem', marginBottom: 12, padding: '8px 12px', backgroundColor: '#FEF2F2', borderRadius: 6 }}>
+          <div className="text-[#EF4444] text-[0.9rem] mb-3 py-2 px-3 bg-[#FEF2F2] rounded-md">
             {error}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <button
             type="button"
-            className="button-primary"
-            style={{ flex: 1, padding: '12px 20px' }}
+            className="button-primary flex-1"
             onClick={handleConfirm}
             disabled={isPending}
           >
@@ -112,7 +103,7 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
           </button>
           <button
             type="button"
-            style={{ padding: '12px 20px', borderRadius: '6px', border: '1.5px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)', fontWeight: 600, cursor: 'pointer' }}
+            className="px-5 py-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer"
             onClick={onClose}
             disabled={isPending}
           >
@@ -123,7 +114,7 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
         {error && (
           <button
             type="button"
-            style={{ marginTop: 8, width: '100%', padding: '10px 20px', borderRadius: '6px', border: '1.5px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)', fontWeight: 600, cursor: 'pointer' }}
+            className="mt-2 w-full py-2.5 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer"
             onClick={handleConfirm}
           >
             Reintentar
@@ -132,44 +123,4 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
       </div>
     </div>
   )
-}
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1100,
-  padding: 16,
-}
-
-const modalStyle: React.CSSProperties = {
-  backgroundColor: '#fff',
-  borderRadius: 12,
-  padding: 24,
-  maxWidth: 500,
-  width: '100%',
-  maxHeight: '90vh',
-  overflowY: 'auto',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-}
-
-const closeBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  fontSize: '1.5rem',
-  cursor: 'pointer',
-  lineHeight: 1,
-  padding: '4px 8px',
-  borderRadius: 4,
-}
-
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '4px 0',
-  fontSize: '0.95rem',
 }

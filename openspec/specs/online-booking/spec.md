@@ -30,7 +30,9 @@ El modelo `Configuracion` DEBE incluir `cbu_alias: str` y `cbu_number: str`. Los
 
 ### REQ-BKG-002 — Flujo Multi-Step (MUST)
 
-La reserva DEBE tener 4 pasos secuenciales: (1) selección de servicio, (2) datos del cliente (nombre, apellido, teléfono, DNI) + calendario, (3) resumen con servicio, total, seña y datos ingresados + botón "Confirmar turno", (4) pantalla de pago con CBU/Alias y monto de seña.
+La reserva DEBE tener 4 pasos secuenciales: (1) selección de servicio, (2) datos del cliente (nombre, apellido, teléfono, DNI) + calendario, (3) resumen con servicio, total, seña y datos ingresados + botón "Confirmar turno", (4) pantalla de pago con CBU/Alias y monto de seña. El paso 2 DEBE utilizar grid responsive: en mobile (<768px) el calendario y el formulario de datos DEBEN apilarse verticalmente. En desktop (≥768px) DEBEN mostrarse en dos columnas lado a lado.
+
+(Previously: Step 2 had no responsive grid behavior — content could overflow on mobile.)
 
 #### Scenario: Flujo completo
 - DADO una clienta en /reservar
@@ -47,6 +49,21 @@ La reserva DEBE tener 4 pasos secuenciales: (1) selección de servicio, (2) dato
 - DADO una clienta sin servicio seleccionado
 - CUANDO intenta confirmar
 - THEN el sistema muestra "Seleccioná un servicio antes de continuar"
+
+#### Scenario: Step 2 stacks on mobile (NEW)
+
+- GIVEN a client in step 2 at 375px viewport
+- WHEN the step 2 view renders
+- THEN the calendar and data form stack vertically in a single column
+- AND all content is visible without horizontal overflow
+- AND scroll reaches the confirm button
+
+#### Scenario: Step 2 side-by-side on desktop (NEW)
+
+- GIVEN a client in step 2 at 1024px viewport
+- WHEN the step 2 view renders
+- THEN the calendar displays on one side and the data form on the other
+- AND both panels are fully visible without scrolling horizontally
 
 ### REQ-BKG-003 — WhatsApp Payment Receipt (MUST)
 

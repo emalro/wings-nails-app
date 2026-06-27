@@ -81,7 +81,8 @@ const STATUS_COLORS: Record<string, string> = {
 const DEFAULT_COLOR = '#6B7280'
 
 export default function CalendarView({ appointments, loading, onEventClick }: CalendarViewProps) {
-  const [view, setView] = React.useState<string>(Views.WEEK)
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
+  const [view, setView] = React.useState<string>(isMobile ? Views.DAY : Views.WEEK)
   const [date, setDate] = React.useState(new Date())
 
   const dateStr = format(date, 'yyyy-MM-dd')
@@ -152,7 +153,7 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
+      <div className="text-center py-12 text-[var(--text-secondary)]">
         Cargando turnos...
       </div>
     )
@@ -162,7 +163,7 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
     return (
       <div>
         <Toolbar view={view} onViewChange={setView} onToday={goToToday} onBack={goBack} onForward={goForward} />
-        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
+        <div className="text-center py-12 text-[var(--text-secondary)]">
           Sin turnos registrados
         </div>
       </div>
@@ -178,7 +179,7 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
         startAccessor="start"
         endAccessor="end"
         titleAccessor="title"
-        style={{ height: 500 }}
+        className="h-[500px] md:h-[calc(100vh-200px)]"
         view={view as any}
         date={date}
         min={minTime}
@@ -212,22 +213,17 @@ function Toolbar({ view, onViewChange, onToday, onBack, onForward }: ToolbarProp
   ]
 
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-      <button type="button" onClick={onBack} style={btnStyle}>&larr;</button>
-      <button type="button" onClick={onToday} style={btnStyle}>Hoy</button>
-      <button type="button" onClick={onForward} style={btnStyle}>&rarr;</button>
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+    <div className="flex gap-2 mb-3 flex-wrap items-center">
+      <button type="button" onClick={onBack} className="btn-toolbar">&larr;</button>
+      <button type="button" onClick={onToday} className="btn-toolbar">Hoy</button>
+      <button type="button" onClick={onForward} className="btn-toolbar">&rarr;</button>
+      <div className="ml-auto flex gap-1">
         {views.map((v) => (
           <button
             key={v.key}
             type="button"
             onClick={() => onViewChange(v.key)}
-            style={{
-              ...btnStyle,
-              background: view === v.key ? 'var(--accent, #7c3aed)' : 'var(--surface, #fff)',
-              color: view === v.key ? '#fff' : 'inherit',
-              fontWeight: view === v.key ? 600 : 400,
-            }}
+            className={`btn-toolbar ${view === v.key ? 'bg-[var(--primary)] text-white font-semibold' : ''}`}
           >
             {v.label}
           </button>
@@ -235,14 +231,4 @@ function Toolbar({ view, onViewChange, onToday, onBack, onForward }: ToolbarProp
       </div>
     </div>
   )
-}
-
-const btnStyle: React.CSSProperties = {
-  padding: '6px 14px',
-  border: '1.5px solid var(--border, #e2e8f0)',
-  borderRadius: '6px',
-  background: 'var(--surface, #fff)',
-  cursor: 'pointer',
-  fontSize: '0.85rem',
-  fontWeight: 500,
 }

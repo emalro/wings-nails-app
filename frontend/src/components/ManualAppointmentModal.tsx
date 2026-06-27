@@ -10,46 +10,6 @@ interface ManualAppointmentModalProps {
   onAppointmentCreated: () => void
 }
 
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 16,
-}
-
-const modalStyle: React.CSSProperties = {
-  backgroundColor: '#fff',
-  borderRadius: 14,
-  padding: 28,
-  maxWidth: 520,
-  width: '100%',
-  maxHeight: '90vh',
-  overflowY: 'auto',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1.5px solid var(--border, #e2e8f0)',
-  borderRadius: 8,
-  fontSize: '0.95rem',
-  background: 'var(--surface, #fff)',
-  boxSizing: 'border-box',
-}
-
-const labelStyle: React.CSSProperties = {
-  fontWeight: 600,
-  fontSize: '0.9rem',
-  display: 'block',
-  marginBottom: 6,
-  color: 'var(--text, #1C1517)',
-}
-
 export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentCreated }: ManualAppointmentModalProps) {
   const { data: services = [] } = useServices(false)
   const createClientMutation = useCreateClient()
@@ -293,70 +253,54 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   if (!isOpen) return null
 
   return (
-    <div className="manual-modal" style={overlayStyle} onClick={onClose}>
-      <div className="manual-modal-content" style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontFamily: 'var(--font-display, Georgia, serif)' }}>
+    <div className="manual-modal modal-overlay" onClick={onClose}>
+      <div className="manual-modal-content modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="m-0 text-1.25rem font-[var(--font-display)]">
             Cargar Turno Manual
           </h3>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1, padding: '4px 8px' }}>&times;</button>
+          <button type="button" onClick={onClose} className="bg-none border-none text-1.5rem cursor-pointer leading-none py-1 px-2">&times;</button>
         </div>
 
         {error && (
-          <div className="status-notice error" style={{ marginBottom: 16 }}>
+          <div className="status-notice error mb-4">
             {error}
           </div>
         )}
 
         {/* ── Step 1: Client Search ── */}
-        <div style={{ marginBottom: 20 }} ref={searchRef}>
-          <label style={labelStyle}>Clienta</label>
+        <div className="mb-5" ref={searchRef}>
+          <label className="block font-semibold text-[0.9rem] text-[var(--text)] mb-1.5">Clienta</label>
           {selectedClient && !showQuickForm ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="flex items-center gap-2">
               <input
-                className="client-search-input"
+                className="client-search-input modal-input flex-1"
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 placeholder="Buscá por nombre, apellido o teléfono..."
-                style={{ ...inputStyle, flex: 1 }}
               />
               <button
                 type="button"
                 onClick={() => { setSelectedClient(null); setSearchQuery(''); setShowDropdown(false) }}
-                style={{ padding: '10px 12px', border: '1.5px solid var(--border)', borderRadius: 8, background: 'var(--surface)', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                className="py-2 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] cursor-pointer font-semibold text-[0.85rem]"
               >
                 Cambiar
               </button>
             </div>
           ) : (
-            <div className="client-search-wrapper" style={{ position: 'relative' }}>
+            <div className="client-search-wrapper relative">
               <input
-                className="client-search-input"
+                className="client-search-input modal-input"
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchChange}
-                onFocus={() => { if (searchQuery.length >= 2) setShowDropdown(true) }}
                 placeholder="Buscá por nombre, apellido o teléfono..."
-                style={inputStyle}
               />
               {showDropdown && (
-                <div className="search-dropdown" style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  background: '#fff',
-                  border: '1.5px solid var(--border)',
-                  borderRadius: 8,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-                  zIndex: 100,
-                  maxHeight: 240,
-                  overflowY: 'auto',
-                  marginTop: 4,
-                }}>
+                <div className="search-dropdown">
                   {searchLoading ? (
-                    <div style={{ padding: 16, textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                    <div className="py-4 text-center text-[var(--muted)] text-[0.9rem]">
                       Buscando...
                     </div>
                   ) : searchResults && searchResults.length > 0 ? (
@@ -365,34 +309,21 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
                         key={client.id}
                         type="button"
                         onClick={() => handleSelectClient(client)}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          padding: '12px 16px',
-                          border: 'none',
-                          background: 'transparent',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontSize: '0.9rem',
-                          borderBottom: '1px solid var(--border)',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--primary-light, #F0E4EA)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        className="search-dropdown-item"
                       >
                         <strong>{client.nombre} {client.apellido}</strong>
                         {' — '}{client.telefonos?.[0]?.telefono || ''}
                       </button>
                     ))
                   ) : debouncedQuery.length >= 2 ? (
-                    <div style={{ padding: 16 }}>
-                      <p style={{ margin: '0 0 12px', color: 'var(--muted)', fontSize: '0.9rem' }}>
+                    <div className="p-4">
+                      <p className="mt-0 mb-3 text-[var(--muted)] text-[0.9rem]">
                         No se encontraron clientas. Crear nueva ficha
                       </p>
                       <button
                         type="button"
-                        className="button-primary"
+                        className="button-primary py-2 px-4 text-[0.9rem]"
                         onClick={handleShowQuickForm}
-                        style={{ padding: '10px 16px', fontSize: '0.9rem' }}
                       >
                         Crear nueva ficha
                       </button>
@@ -406,39 +337,32 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
 
         {/* ── Quick Client Form ── */}
         {showQuickForm && (
-          <div className="quick-client-form" style={{
-            marginBottom: 20,
-            padding: 16,
-            background: 'var(--primary-light, #F0E4EA)',
-            borderRadius: 8,
-            border: '1.5px solid var(--primary, #7A1F4A)',
-          }}>
-            <h4 style={{ margin: '0 0 12px', fontSize: '1rem', fontFamily: 'var(--font-display, Georgia, serif)' }}>
+          <div className="quick-client-form mb-5">
+            <h4 className="m-0 mb-3 text-1rem font-[var(--font-display)]">
               Nueva clienta
             </h4>
-            <div style={{ display: 'grid', gap: 12 }}>
+            <div className="grid gap-3">
               <div>
-                <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Nombre *</label>
-                <input value={quickNombre} onChange={e => setQuickNombre(e.target.value)} style={inputStyle} placeholder="Nombre" />
+                <label className="block font-semibold text-[0.85rem] mb-1">Nombre *</label>
+                <input value={quickNombre} onChange={e => setQuickNombre(e.target.value)} className="modal-input" placeholder="Nombre" />
               </div>
               <div>
-                <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Apellido *</label>
-                <input value={quickApellido} onChange={e => setQuickApellido(e.target.value)} style={inputStyle} placeholder="Apellido" />
+                <label className="block font-semibold text-[0.85rem] mb-1">Apellido *</label>
+                <input value={quickApellido} onChange={e => setQuickApellido(e.target.value)} className="modal-input" placeholder="Apellido" />
               </div>
               <div>
-                <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Teléfono *</label>
-                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} style={inputStyle} placeholder="3411234567" />
+                <label className="block font-semibold text-[0.85rem] mb-1">Teléfono *</label>
+                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} className="modal-input" placeholder="3411234567" />
               </div>
               <div>
-                <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>DNI *</label>
-                <input value={quickDni} onChange={e => setQuickDni(e.target.value)} style={inputStyle} placeholder="12345678" />
+                <label className="block font-semibold text-[0.85rem] mb-1">DNI *</label>
+                <input value={quickDni} onChange={e => setQuickDni(e.target.value)} className="modal-input" placeholder="12345678" />
               </div>
               <button
                 type="button"
-                className="button-primary"
+                className="button-primary py-3 px-4 text-[0.9rem]"
                 onClick={handleCreateQuickClient}
                 disabled={!quickNombre || !quickApellido || !quickTelefono || !quickDni || createClientMutation.isPending}
-                style={{ padding: '12px 16px', fontSize: '0.9rem' }}
               >
                 {createClientMutation.isPending ? 'Creando...' : 'Guardar y seleccionar'}
               </button>
@@ -447,38 +371,27 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
         )}
 
         {/* ── Step 2: Service Selector (multi) ── */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Servicios (podés elegir varios)</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="mb-5">
+          <label className="block font-semibold text-[0.9rem] text-[var(--text)] mb-1.5">Servicios (podés elegir varios)</label>
+          <div className="flex flex-col gap-2">
             {services.length === 0 ? (
-              <p style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>No hay servicios activos.</p>
+              <p className="text-[var(--muted)] text-[0.9rem]">No hay servicios activos.</p>
             ) : (
               services.map((s: any) => {
                 const isSelected = selectedServiceIds.includes(s.id)
                 return (
                   <label
                     key={s.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      padding: '10px 14px',
-                      border: isSelected ? '2px solid var(--primary)' : '1.5px solid var(--border)',
-                      borderRadius: 8,
-                      background: isSelected ? 'var(--primary-light, #F0E4EA)' : 'var(--surface)',
-                      cursor: 'pointer',
-                      transition: 'all .15s',
-                      fontWeight: isSelected ? 600 : 400,
-                    }}
+                    className={`service-pick-row ${isSelected ? 'selected' : ''}`}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleService(s.id)}
-                      style={{ width: 18, height: 18, accentColor: 'var(--primary)' }}
+                      className="service-pick-checkbox"
                     />
-                    <span style={{ flex: 1 }}>{s.nombre_servicio}</span>
-                    <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+                    <span className="flex-1">{s.nombre_servicio}</span>
+                    <span className="text-[var(--muted)] text-[0.85rem]">
                       ${s.precio_actual} &middot; {s.duracion_minutos} min
                     </span>
                   </label>
@@ -487,65 +400,47 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
             )}
           </div>
           {selectedServiceIds.length > 0 && (
-            <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: 8 }}>
+            <p className="text-[0.85rem] text-[var(--muted)] mt-2">
               {selectedServiceIds.length} servicio{selectedServiceIds.length !== 1 ? 's' : ''} seleccionado{selectedServiceIds.length !== 1 ? 's' : ''}
             </p>
           )}
         </div>
 
         {/* ── Step 3: Date and Time ── */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Fecha y hora</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="mb-5">
+          <label className="block font-semibold text-[0.9rem] text-[var(--text)] mb-1.5">Fecha y hora</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               type="date"
               value={appointmentDate}
               onChange={e => setAppointmentDate(e.target.value)}
-              style={inputStyle}
+              className="modal-input"
             />
             <input
               type="time"
               value={appointmentTime}
               onChange={e => setAppointmentTime(e.target.value)}
-              style={inputStyle}
+              className="modal-input"
             />
           </div>
         </div>
 
         {/* ── Step 4: Toggles ── */}
-        <div style={{ marginBottom: 20, display: 'flex', gap: 20 }}>
+        <div className="mb-5 flex flex-col md:flex-row gap-5">
           <div>
-            <label style={{ fontWeight: 600, fontSize: '0.9rem', display: 'block', marginBottom: 8, color: 'var(--text)' }}>Estado</label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <label className="block font-semibold text-[0.9rem] mb-2 text-[var(--text)]">Estado</label>
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setEstadoCita(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: estadoCita === null ? '2px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: estadoCita === null ? 'var(--primary-light)' : 'var(--surface)',
-                  color: estadoCita === null ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
+                className={`pill-toggle ${estadoCita === null ? 'selected' : ''}`}
               >
                 Pendiente
               </button>
               <button
                 type="button"
                 onClick={() => setEstadoCita('Confirmado')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: estadoCita === 'Confirmado' ? '2px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: estadoCita === 'Confirmado' ? 'var(--primary-light)' : 'var(--surface)',
-                  color: estadoCita === 'Confirmado' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
+                className={`pill-toggle ${estadoCita === 'Confirmado' ? 'selected' : ''}`}
               >
                 Confirmado
               </button>
@@ -553,37 +448,19 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
           </div>
 
           <div>
-            <label style={{ fontWeight: 600, fontSize: '0.9rem', display: 'block', marginBottom: 8, color: 'var(--text)' }}>Pago seña</label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <label className="block font-semibold text-[0.9rem] mb-2 text-[var(--text)]">Pago seña</label>
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setMetodoPago('Transferencia')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: metodoPago === 'Transferencia' ? '2px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: metodoPago === 'Transferencia' ? 'var(--primary-light)' : 'var(--surface)',
-                  color: metodoPago === 'Transferencia' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
+                className={`pill-toggle ${metodoPago === 'Transferencia' ? 'selected' : ''}`}
               >
                 Transferencia
               </button>
               <button
                 type="button"
                 onClick={() => setMetodoPago('Efectivo')}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: metodoPago === 'Efectivo' ? '2px solid var(--primary)' : '1.5px solid var(--border)',
-                  background: metodoPago === 'Efectivo' ? 'var(--primary-light)' : 'var(--surface)',
-                  color: metodoPago === 'Efectivo' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 600,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
+                className={`pill-toggle ${metodoPago === 'Efectivo' ? 'selected' : ''}`}
               >
                 Efectivo
               </button>
@@ -593,16 +470,9 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
 
         {/* ── Summary ── */}
         {selectedServiceIds.length > 0 && appointmentDate && appointmentTime && selectedClient && (
-          <div style={{
-            marginBottom: 20,
-            padding: 16,
-            background: 'var(--bg, #FAF7F5)',
-            borderRadius: 8,
-            border: '1px solid var(--border)',
-            fontSize: '0.9rem',
-          }}>
-            <p style={{ margin: '4px 0' }}><strong>Clienta:</strong> {selectedClient.nombre} {selectedClient.apellido}</p>
-            <p style={{ margin: '4px 0' }}><strong>Fecha:</strong> {appointmentDate} a las {appointmentTime}</p>
+          <div className="summary-block mb-5">
+            <p className="my-1"><strong>Clienta:</strong> {selectedClient.nombre} {selectedClient.apellido}</p>
+            <p className="my-1"><strong>Fecha:</strong> {appointmentDate} a las {appointmentTime}</p>
             {(() => {
               const selected = getSelectedServices()
               const total = selected.reduce((sum: number, s: any) => sum + s.precio_actual, 0)
@@ -610,14 +480,14 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
               return selected.length > 0 ? (
                 <>
                   {selected.map((s: any) => (
-                    <p key={s.id} style={{ margin: '2px 0' }}><strong>Servicio:</strong> {s.nombre_servicio} — ${s.precio_actual}</p>
+                    <p key={s.id} className="my-0.5"><strong>Servicio:</strong> {s.nombre_servicio} — ${s.precio_actual}</p>
                   ))}
-                  <p style={{ margin: '4px 0' }}><strong>Total:</strong> ${total}</p>
-                  <p style={{ margin: '4px 0' }}><strong>Seña:</strong> ${sena} ({metodoPago})</p>
+                  <p className="my-1"><strong>Total:</strong> ${total}</p>
+                  <p className="my-1"><strong>Seña:</strong> ${sena} ({metodoPago})</p>
                 </>
               ) : null
             })()}
-            <p style={{ margin: '4px 0' }}><strong>Estado:</strong> {estadoCita || 'Pendiente'}</p>
+            <p className="my-1"><strong>Estado:</strong> {estadoCita || 'Pendiente'}</p>
           </div>
         )}
 
@@ -627,7 +497,6 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
           className="button-primary"
           onClick={handleSubmit}
           disabled={!isFormValid() || createAppointmentMutation.isPending}
-          style={{ marginTop: 4 }}
         >
           {createAppointmentMutation.isPending ? 'Guardando...' : 'Guardar Turno'}
         </button>

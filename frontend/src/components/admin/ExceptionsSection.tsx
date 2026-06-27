@@ -52,14 +52,14 @@ export default function ExceptionsSection({
       <h3>Excepciones</h3>
       {exceptionMessage && <div className="status-notice success">{exceptionMessage}</div>}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+      <div className="flex gap-2 flex-col sm:flex-row flex-wrap items-start sm:items-center mb-4">
         <input
           type="date"
           value={exceptionDate}
           onChange={e => setExceptionDate(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
+          className="py-2 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]"
         />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+        <label className="flex items-center gap-1 cursor-pointer">
           <input type="checkbox" checked={exceptionCerrado} onChange={e => setExceptionCerrado(e.target.checked)} />
           Cerrado
         </label>
@@ -68,7 +68,7 @@ export default function ExceptionsSection({
             <select
               value={exceptionApertura}
               onChange={e => setExceptionApertura(e.target.value)}
-              style={{ padding: '8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
+              className="py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]"
             >
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -76,7 +76,7 @@ export default function ExceptionsSection({
             <select
               value={exceptionCierre}
               onChange={e => setExceptionCierre(e.target.value)}
-              style={{ padding: '8px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)' }}
+              className="py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)]"
             >
               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -96,12 +96,12 @@ export default function ExceptionsSection({
       ) : exceptions.length === 0 ? (
         <p>No hay excepciones.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
+        <ul className="list-none p-0">
           {exceptions.map((exc) => {
             const fecha = new Date(exc.fecha + 'T00:00:00')
             const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
             return (
-              <li key={exc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <li key={exc.id} className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span>
                   <strong>{fechaStr}</strong>
                   {exc.cerrado
@@ -111,9 +111,8 @@ export default function ExceptionsSection({
                 </span>
                 <button
                   type="button"
-                  className="danger"
+                  className="danger py-1 px-3 text-sm"
                   onClick={() => handleDeleteException(exc.id)}
-                  style={{ padding: '4px 12px', fontSize: '.85rem' }}
                 >
                   Eliminar
                 </button>

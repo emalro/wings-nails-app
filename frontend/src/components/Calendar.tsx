@@ -165,7 +165,7 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
           ) : timeSlots.every(s => !s.available) ? (
             <>
               <p>⏰ Todos los horarios están ocupados para esta fecha.</p>
-              <p className="hint" style={{ marginTop: 12, fontSize: '.8rem', color: 'var(--muted)' }}>
+              <p className="hint mt-3 text-[.8rem] text-[var(--muted)]">
                 Los horarios ocupados no muestran datos de otras clientas por protección de datos personales.
               </p>
             </>
@@ -193,7 +193,7 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
                   )
                 })}
               </div>
-              <p className="hint" style={{ marginTop: 12, fontSize: '.8rem', color: 'var(--muted)' }}>
+              <p className="hint mt-3 text-[.8rem] text-[var(--muted)]">
                 Los horarios ocupados no muestran datos de otras clientas por protección de datos personales.
               </p>
             </>

@@ -221,9 +221,9 @@ export default function Reservar() {
   function renderServiceStep() {
     return (
       <>
-        <div className="section-header" style={{ textAlign: 'left', marginBottom: 24 }}>
+        <div className="section-header text-left mb-6">
           <span className="overline">Paso 1 de 4</span>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+          <h2 className="font-[var(--font-display)] text-[1.4rem] mt-1">
             Seleccioná uno o más servicios
           </h2>
         </div>
@@ -233,7 +233,7 @@ export default function Reservar() {
         ) : services.length === 0 ? (
           <div className="empty-state">No hay servicios disponibles.</div>
         ) : (
-          <div className="service-grid" style={{ marginBottom: 32 }}>
+          <div className="service-grid mb-8">
             {services.map((service: Service) => {
               const isSelected = selectedServices.includes(service.id)
               return (
@@ -245,7 +245,7 @@ export default function Reservar() {
                 >
                   <div className="service-card-top">
                     <span className="service-card-title">
-                      {isSelected && <span style={{ marginRight: 6 }}>✓</span>}
+                      {isSelected && <span className="mr-1.5">✓</span>}
                       {service.nombre_servicio}
                     </span>
                     <span className="service-card-price">${service.precio_actual}</span>
@@ -262,8 +262,8 @@ export default function Reservar() {
         )}
 
         {selectedServices.length > 0 && (
-          <div className="summary-card" style={{ marginBottom: 16 }}>
-            <p style={{ margin: 0 }}>
+          <div className="summary-card mb-4">
+            <p className="m-0">
               <strong>{selectedServices.length} servicio{selectedServices.length !== 1 ? 's' : ''} seleccionado{selectedServices.length !== 1 ? 's' : ''}</strong>
               {' — '}Total: <strong>${totalAmount}</strong>
               {' | '}Seña: <strong>${depositAmount}</strong>
@@ -283,11 +283,11 @@ export default function Reservar() {
 
   function renderFormStep() {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 28 }}>
+      <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-7">
         <div className="form-card">
-          <div className="section-header" style={{ textAlign: 'left', marginBottom: 20 }}>
+          <div className="section-header text-left mb-5">
             <span className="overline">Paso 2 de 4</span>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+            <h2 className="font-[var(--font-display)] text-[1.4rem] mt-1">
               Tus datos
             </h2>
           </div>
@@ -361,18 +361,17 @@ export default function Reservar() {
               placeholder="Detalles adicionales para tu turno..."
               maxLength={500}
               rows={3}
-              className={form.touched.observaciones && form.errors.observaciones ? 'input-error' : ''}
-              style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc', resize: 'vertical', fontFamily: 'inherit' }}
+              className={`w-full p-2 rounded-md border border-gray-300 resize-y font-[inherit] ${form.touched.observaciones && form.errors.observaciones ? 'input-error' : ''}`}
               required
             />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="flex justify-between items-center">
               <FieldError name="observaciones" errors={form.errors} touched={form.touched} />
-              <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{form.values.observaciones.length}/500</span>
+              <span className="text-xs text-[var(--muted)]">{form.values.observaciones.length}/500</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-            <button type="button" onClick={handleBackToService} style={{ padding: '12px 20px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontWeight: 600, cursor: 'pointer' }}>
+          <div className="flex gap-3 mt-4">
+            <button type="button" onClick={handleBackToService} className="px-5 py-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer">
               Volver
             </button>
             <button className="button-primary" onClick={handleNextToConfirm}>
@@ -390,7 +389,7 @@ export default function Reservar() {
               {selectedServiceList.map((s: Service) => (
                 <p key={s.id}><strong>{s.nombre_servicio}</strong> — ${s.precio_actual}</p>
               ))}
-              <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+              <hr className="my-2 border-none border-t border-[var(--border)]" />
               <p><strong>Duración total:</strong> {totalDuration} min</p>
               <p><strong>Total:</strong> ${totalAmount}</p>
               <p><strong>Seña total:</strong> ${depositAmount}</p>
@@ -408,69 +407,68 @@ export default function Reservar() {
 
   function renderConfirmStep() {
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        <div className="section-header" style={{ textAlign: 'left', marginBottom: 20 }}>
+      <div className="max-w-[500px] mx-auto">
+        <div className="section-header text-left mb-5">
           <span className="overline">Paso 3 de 4</span>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+          <h2 className="font-[var(--font-display)] text-1.4rem mt-1">
             Confirmá tu turno
           </h2>
         </div>
 
         {message && (
-          <div className={`status-notice ${messageType}`} style={{ marginBottom: 16 }}>
+          <div className={`status-notice ${messageType} mb-4`}>
             {message}
           </div>
         )}
 
-        <div className="summary-card" style={{ marginBottom: 20 }}>
+        <div className="summary-card mb-5">
           <h3>Resumen de la reserva</h3>
           {selectedServiceList.length > 0 && (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="w-full border-collapse">
               <tbody>
                 <tr>
-                  <td style={{ padding: '6px 0', color: 'var(--muted)', verticalAlign: 'top' }}>Servicios</td>
-                  <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>
+                  <td className="py-1.5 text-[var(--muted)] align-top">Servicios</td>
+                  <td className="py-1.5 text-right font-semibold">
                     {selectedServiceList.map((s: Service) => (
                       <div key={s.id}>{s.nombre_servicio} — ${s.precio_actual}</div>
                     ))}
                   </td>
                 </tr>
-                <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Duración total</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>{totalDuration} min</td></tr>
-                <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Total</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>${totalAmount}</td></tr>
-                <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Seña</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>${depositAmount}</td></tr>
+                <tr><td className="py-1.5 text-[var(--muted)]">Duración total</td><td className="py-1.5 text-right font-semibold">{totalDuration} min</td></tr>
+                <tr><td className="py-1.5 text-[var(--muted)]">Total</td><td className="py-1.5 text-right font-semibold">${totalAmount}</td></tr>
+                <tr><td className="py-1.5 text-[var(--muted)]">Seña</td><td className="py-1.5 text-right font-semibold">${depositAmount}</td></tr>
                 {form.values.fechaHora && (
-                  <tr><td style={{ padding: '6px 0', color: 'var(--muted)' }}>Fecha y hora</td><td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 600 }}>{new Date(form.values.fechaHora).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(form.values.fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</td></tr>
+                  <tr><td className="py-1.5 text-[var(--muted)]">Fecha y hora</td><td className="py-1.5 text-right font-semibold">{new Date(form.values.fechaHora).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(form.values.fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</td></tr>
                 )}
               </tbody>
             </table>
           )}
-          <hr style={{ margin: '12px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <hr className="my-3 border-none border-t border-[var(--border)]" />
+          <table className="w-full border-collapse">
             <tbody>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Nombre</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.nombre} {form.values.apellido}</td></tr>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>DNI</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.dni}</td></tr>
-              <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Teléfono</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.telefono}</td></tr>
+              <tr><td className="py-1 text-[var(--muted)]">Nombre</td><td className="py-1 text-right font-semibold">{form.values.nombre} {form.values.apellido}</td></tr>
+              <tr><td className="py-1 text-[var(--muted)]">DNI</td><td className="py-1 text-right font-semibold">{form.values.dni}</td></tr>
+              <tr><td className="py-1 text-[var(--muted)]">Teléfono</td><td className="py-1 text-right font-semibold">{form.values.telefono}</td></tr>
               {form.values.observaciones.trim() && (
-                <tr><td style={{ padding: '4px 0', color: 'var(--muted)' }}>Observaciones</td><td style={{ padding: '4px 0', textAlign: 'right', fontWeight: 600 }}>{form.values.observaciones}</td></tr>
+                <tr><td className="py-1 text-[var(--muted)]">Observaciones</td><td className="py-1 text-right font-semibold">{form.values.observaciones}</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="flex gap-3">
           <button
             type="button"
             onClick={handleBackToForm}
             disabled={submitting}
-            style={{ padding: '12px 20px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontWeight: 600, cursor: 'pointer' }}
+            className="px-5 py-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer"
           >
             Volver
           </button>
           <button
-            className="button-primary"
+            className="button-primary flex-1"
             onClick={handleConfirm}
             disabled={submitting}
-            style={{ flex: 1 }}
           >
             {submitting ? 'Confirmando...' : 'Confirmar turno'}
           </button>
@@ -487,36 +485,36 @@ export default function Reservar() {
     const hasWhatsApp = config?.whatsapp_number
 
     return (
-      <div style={{ maxWidth: 500, margin: '0 auto' }}>
-        <div className="section-header" style={{ textAlign: 'left', marginBottom: 20 }}>
+      <div className="max-w-[500px] mx-auto">
+        <div className="section-header text-left mb-5">
           <span className="overline">Paso 4 de 4</span>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+          <h2 className="font-[var(--font-display)] text-1.4rem mt-1">
             Datos de pago
           </h2>
         </div>
 
-        <div className="summary-card" style={{ marginBottom: 20 }}>
+        <div className="summary-card mb-5">
           <h3>Turno creado con éxito</h3>
           {appointment && (
-            <div style={{ marginTop: 12 }}>
+            <div className="mt-3">
               <p><strong>N° de turno:</strong> #{appointment.id}</p>
               <p><strong>Cliente:</strong> {appointment.cliente_nombre}</p>
             </div>
           )}
-          <p className="hint" style={{ marginTop: 12 }}>
+          <p className="hint mt-3">
             El turno queda en estado <strong>Pendiente</strong>. Para confirmarlo, enviá el comprobante de la seña.
           </p>
         </div>
 
-        <div className="summary-card" style={{ marginBottom: 20 }}>
+        <div className="summary-card mb-5">
           <h3>Seña a abonar</h3>
-          <p style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--accent)', margin: '12px 0' }}>
+          <p className="text-1.8rem font-bold text-[var(--primary)] my-3">
             ${depositAmount}
           </p>
         </div>
 
         {hasCbu ? (
-          <div className="summary-card" style={{ marginBottom: 20 }}>
+          <div className="summary-card mb-5">
             <h3>Datos bancarios</h3>
             {config?.cbu_alias && (
               <p><strong>Alias:</strong> {config.cbu_alias}</p>
@@ -526,8 +524,8 @@ export default function Reservar() {
             )}
           </div>
         ) : (
-          <div className="summary-card" style={{ marginBottom: 20 }}>
-            <p className="hint" style={{ textAlign: 'center', margin: 0 }}>
+          <div className="summary-card mb-5">
+            <p className="hint text-center m-0">
               Consultá por WhatsApp para recibir los datos bancarios.
             </p>
           </div>
@@ -538,13 +536,12 @@ export default function Reservar() {
             href={whatsappUrl || '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="button-primary"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none', width: '100%' }}
+            className="button-primary inline-flex items-center justify-center gap-2 no-underline w-full"
           >
             Enviar comprobante por WhatsApp
           </a>
         ) : (
-          <p className="hint" style={{ textAlign: 'center' }}>
+          <p className="hint text-center">
             Contactanos para coordinar el pago.
           </p>
         )}
@@ -555,8 +552,8 @@ export default function Reservar() {
   // ── Main Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="content" style={{ paddingTop: 20, paddingBottom: 48 }}>
-      <div className="page-header" style={{ padding: '28px 0 32px' }}>
+    <div className="content pt-5 pb-12">
+      <div className="page-header py-7 px-0 pb-8">
         <h2>Reservá tu turno</h2>
         <p>Elegí el servicio, completá tus datos y proponé fecha y hora.</p>
       </div>
