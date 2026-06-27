@@ -4,12 +4,48 @@ import axios from 'axios'
 // Prod: set VITE_API_URL to Render backend URL
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
+// ── Token Management ────────────────────────────────────────────────────
+const TOKEN_KEY = 'access_token'
+
+function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token)
+  } catch {
+    // localStorage unavailable — silent fail
+  }
+}
+
+export function clearToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // localStorage unavailable — silent fail
+  }
+}
+
 export const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: false,
   headers: {
     'Content-Type': 'application/json'
   }
+})
+
+// Attach Authorization header to every request if token exists
+api.interceptors.request.use((config) => {
+  const token = getStoredToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 // ── Auth API ───────────────────────────────────────────────────────────
@@ -27,11 +63,13 @@ export interface LoginResponse {
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
   const r = await api.post('/auth/login', { email, password })
+  setToken(r.data.access_token)
   return r.data
 }
 
 export async function logout(): Promise<void> {
   await api.post('/auth/logout')
+  clearToken()
 }
 
 export async function getMe(): Promise<UserRead> {
@@ -85,7 +123,8 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        await refreshToken()
+        const data = await refreshToken()
+        setToken(data.access_token)
         processQueue(null)
         return api(originalRequest)
       } catch (refreshError) {
