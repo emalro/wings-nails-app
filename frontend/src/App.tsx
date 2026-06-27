@@ -3,6 +3,7 @@ import { Outlet, Link } from '@tanstack/react-router'
 import { useConfig } from './hooks'
 import { useAuth } from './hooks/useAuth'
 import { SkeletonLoader } from './components/SkeletonLoader'
+import SkipLink from './components/SkipLink'
 import { FaWhatsapp, FaInstagram, FaFacebook, FaAddressBook, FaBars, FaTimes } from "react-icons/fa";
 import { GiAngelWings } from "react-icons/gi";
 
@@ -41,6 +42,7 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="page-wrap">
+        <SkipLink />
         <nav className="navbar">
           <div className="navbar-inner">
             <div className="navbar-brand">
@@ -58,6 +60,7 @@ export default function App() {
 
   return (
     <div className="page-wrap">
+      <SkipLink />
       <nav className="navbar">
         <div className="navbar-inner">
           <Link to="/" className="navbar-brand">
@@ -149,7 +152,7 @@ export default function App() {
         </div>
       </div>
 
-      <main className="page-main">
+      <main className="page-main" id="main" tabIndex={-1}>
         <Outlet />
       </main>
 
