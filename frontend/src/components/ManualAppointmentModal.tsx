@@ -122,7 +122,8 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   }, [selectedServiceIds])
 
   useEffect(() => {
-    form.setField('fecha', appointmentDate)
+    // `new Date('YYYY-MM-DD')` se parsea como UTC; agregar hora lo fuerza a horario local
+    form.setField('fecha', appointmentDate ? `${appointmentDate}T00:00:00` : '')
   }, [appointmentDate])
 
   useEffect(() => {
