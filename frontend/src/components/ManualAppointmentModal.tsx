@@ -121,6 +121,14 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
     form.setField('servicios', selectedServiceIds.length > 0)
   }, [selectedServiceIds])
 
+  useEffect(() => {
+    form.setField('fecha', appointmentDate)
+  }, [appointmentDate])
+
+  useEffect(() => {
+    form.setField('hora', appointmentTime)
+  }, [appointmentTime])
+
   const { data: searchResults, isLoading: searchLoading } = useClientSearch(debouncedQuery)
 
   // Debounce search query (300ms)
