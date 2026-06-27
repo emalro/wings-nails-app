@@ -438,6 +438,9 @@
   .data-table-actions button.primary { border-color: var(--primary); color: var(--primary); }
   .data-table-actions button.primary:hover { background: var(--primary); color: #fff; }
 
+  /* ── Calendar toolbar ── */
+  .btn-toolbar { padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+
   /* ── Responsive overrides (complex ones kept in @layer) ── */
   @media (max-width: 1000px) {
     .client-section-layout { grid-template-columns: 1fr; }
