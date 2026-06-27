@@ -92,9 +92,9 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
           validate: (v: string) => {
             if (!v) return true // handled by required rule
             const today = new Date(new Date().toDateString())
-            return new Date(v) > today
+            return new Date(v) >= today
           },
-          message: 'La fecha debe ser futura',
+          message: 'La fecha no puede ser en el pasado',
         },
       ],
     },
@@ -238,7 +238,12 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   }
 
   async function handleSubmit() {
-    if (!form.validate()) return
+    if (!form.validate()) {
+      // Show first validation error
+      const firstError = Object.values(form.errors).find(Boolean)
+      if (firstError) setError(firstError)
+      return
+    }
     if (!selectedClient) return
     setError(null)
 
