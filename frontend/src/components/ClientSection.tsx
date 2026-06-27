@@ -268,7 +268,7 @@ export default function ClientSection() {
   return (
     <div className="client-section">
       {message && (
-        <div className={`status-notice ${messageType}`} style={{ marginBottom: 16 }}>
+        <div className={`status-notice ${messageType} mb-4`}>
           {message}
         </div>
       )}
@@ -285,7 +285,7 @@ export default function ClientSection() {
             />
           </div>
 
-          <label className="checkbox-row" style={{ marginTop: 12, marginBottom: 12 }}>
+          <label className="checkbox-row my-3">
             <input
               type="checkbox"
               checked={showInactive}
@@ -305,7 +305,7 @@ export default function ClientSection() {
                 filterable: true,
                 filterValue: (c: ClienteRead) => getPrimaryPhone(c),
                 render: (_v: any, c: ClienteRead) => (
-                  <span style={{ fontFamily: 'monospace', fontSize: '.8rem' }}>{getPrimaryPhone(c)}</span>
+                  <span className="phone-cell">{getPrimaryPhone(c)}</span>
                 ),
               },
               { key: 'cantidad_turnos_tomados', label: 'Turnos', sortable: true },
@@ -409,8 +409,7 @@ export default function ClientSection() {
                 </div>
                 <div className="client-edit-actions">
                   <button
-                    className="button-primary"
-                    style={{ width: 'auto', padding: '8px 20px', fontSize: '.85rem' }}
+                    className="button-primary w-auto py-2 px-5 text-[0.85rem]"
                     onClick={handleSaveEdit}
                     disabled={updateClientMutation.isPending || !editForm.isValid}
                   >
@@ -528,8 +527,7 @@ export default function ClientSection() {
                     onChange={(e) => setAddPhoneLabel(e.target.value)}
                   />
                   <button
-                    className="button-primary"
-                    style={{ width: 'auto', padding: '8px 16px', fontSize: '.85rem' }}
+                    className="button-primary w-auto py-2 px-4 text-[0.85rem]"
                     onClick={handleAddPhone}
                     disabled={addPhoneMutation.isPending || !addPhoneNumber}
                   >

@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useServices } from '../hooks'
 
 interface AppointmentService {
   servicio_id: number
@@ -48,16 +47,6 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const DEFAULT_COLOR = '#6B7280'
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '10px 12px',
-  border: '1.5px solid var(--border, #e2e8f0)',
-  borderRadius: '6px',
-  fontSize: '0.95rem',
-  background: 'var(--surface, #fff)',
-  boxSizing: 'border-box',
-}
 
 export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended, onStatusChange, onDelete, isPending, error }: AppointmentModalProps) {
   const statusColor = STATUS_COLORS[cita.estado_cita] || DEFAULT_COLOR
@@ -120,7 +109,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
         </div>
 
         {displayError && (
-          <div style={{ background: '#FEF2F2', color: '#EF4444', padding: '8px 12px', borderRadius: 6, marginBottom: 12, fontSize: '0.9rem' }}>
+          <div className="bg-[#FEF2F2] text-[#EF4444] py-2 px-3 rounded-md mb-3 text-[0.9rem]">
             {displayError}
           </div>
         )}
@@ -128,8 +117,8 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
         {editing ? (
           /* ── EDIT MODE ── */
           <div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontWeight: 500, fontSize: '0.9rem', display: 'block', marginBottom: 4 }}>Fecha y hora</label>
+            <div className="mb-4">
+              <label className="block mb-1 font-medium text-[0.9rem]">Fecha y hora</label>
               <input
                 type="datetime-local"
                 value={editDate}
@@ -138,8 +127,8 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               />
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontWeight: 500, fontSize: '0.9rem', display: 'block', marginBottom: 4 }}>Precio total ($)</label>
+            <div className="mb-4">
+              <label className="block mb-1 font-medium text-[0.9rem]">Precio total ($)</label>
               <input
                 type="number"
                 value={editPrecio}
@@ -149,8 +138,8 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               />
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontWeight: 500, fontSize: '0.9rem', display: 'block', marginBottom: 4 }}>Seña pagada ($)</label>
+            <div className="mb-4">
+              <label className="block mb-1 font-medium text-[0.9rem]">Seña pagada ($)</label>
               <input
                 type="number"
                 value={editSena}
@@ -160,8 +149,8 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               />
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontWeight: 500, fontSize: '0.9rem', display: 'block', marginBottom: 4 }}>Método de pago (seña)</label>
+            <div className="mb-4">
+              <label className="block mb-1 font-medium text-[0.9rem]">Método de pago (seña)</label>
               <select value={editMetodoPago} onChange={(e) => setEditMetodoPago(e.target.value)} className="modal-input">
                 <option value="Transferencia">Transferencia</option>
                 <option value="Efectivo">Efectivo</option>
@@ -169,7 +158,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               </select>
             </div>
 
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 20, fontWeight: 500, fontSize: '0.9rem' }}>
+            <label className="flex items-center gap-2 cursor-pointer mb-5 font-medium text-[0.9rem]">
               <input
                 type="checkbox"
                 checked={editVerificadoManual}
@@ -178,11 +167,10 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               Comprobante verificado manualmente (sin comprobante)
             </label>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="flex gap-2">
               <button
                 type="button"
-                className="button-primary"
-                style={{ flex: 1 }}
+                className="button-primary flex-1"
                 onClick={handleSave}
                 disabled={isPending}
               >
@@ -191,7 +179,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                style={{ padding: '12px 20px', borderRadius: '6px', border: '1.5px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)', fontWeight: 600, cursor: 'pointer' }}
+                className="py-3 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer"
               >
                 Cancelar
               </button>
@@ -200,51 +188,54 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
         ) : (
           /* ── VIEW MODE ── */
           <>
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ margin: '4px 0' }}><strong>Teléfono:</strong> {cita.id_cliente}</p>
-              <p style={{ margin: '4px 0' }}>
+            <div className="mb-4">
+              <p className="my-1"><strong>Teléfono:</strong> {cita.id_cliente}</p>
+              <p className="my-1">
                 <strong>Fecha:</strong>{' '}
                 {cita.fecha_hora_cita.split('T')[0].split('-').reverse().join('/')}
               </p>
-              <p style={{ margin: '4px 0' }}>
+              <p className="my-1">
                 <strong>Horario:</strong>{' '}
                 {cita.fecha_hora_cita.split('T')[1]?.substring(0, 5) || '--:--'}
               </p>
-              <p style={{ margin: '4px 0' }}>
+              <p className="my-1">
                 <strong>Duración:</strong> {cita.duracion_total_minutos} min
               </p>
-              <p style={{ margin: '4px 0' }}>
+              <p className="my-1">
                 <strong>Estado:</strong>{' '}
-                <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, backgroundColor: statusColor, color: '#fff', fontSize: '0.85rem', fontWeight: 600 }}>
+                <span
+                  className="inline-block py-0.5 px-2 rounded text-[#fff] text-[0.85rem] font-semibold"
+                  style={{ backgroundColor: statusColor }}
+                >
                   {cita.estado_cita}
                 </span>
               </p>
               {cita.comprobante_verificado_manual && (
-                <p style={{ margin: '4px 0', color: '#F59E0B', fontSize: '0.85rem' }}>
+                <p className="my-1 text-[#F59E0B] text-[0.85rem]">
                   ✓ Pago verificado manualmente
                 </p>
               )}
             </div>
 
             {cita.servicios.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Servicios</h4>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <div className="mb-4">
+                <h4 className="mt-0 mb-2 text-1rem">Servicios</h4>
+                <table className="w-full border-collapse text-[0.9rem]">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border, #e2e8f0)' }}>
-                      <th style={{ textAlign: 'left', padding: '4px 8px' }}>Servicio</th>
-                      <th style={{ textAlign: 'center', padding: '4px 8px' }}>Duración</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px' }}>Precio</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px' }}>Subtotal</th>
+                    <tr className="border-b border-[var(--border)]">
+                      <th className="text-left py-1 px-2">Servicio</th>
+                      <th className="text-center py-1 px-2">Duración</th>
+                      <th className="text-right py-1 px-2">Precio</th>
+                      <th className="text-right py-1 px-2">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cita.servicios.map((s) => (
-                      <tr key={s.servicio_id} style={{ borderBottom: '1px solid var(--border, #e2e8f0)' }}>
-                        <td style={{ padding: '4px 8px' }}>{s.nombre_servicio}</td>
-                        <td style={{ textAlign: 'center', padding: '4px 8px' }}>{s.duracion_minutos} min</td>
-                        <td style={{ textAlign: 'right', padding: '4px 8px' }}>${s.precio_unitario.toFixed(2)}</td>
-                        <td style={{ textAlign: 'right', padding: '4px 8px' }}>${s.subtotal.toFixed(2)}</td>
+                      <tr key={s.servicio_id} className="border-b border-[var(--border)]">
+                        <td className="py-1 px-2">{s.nombre_servicio}</td>
+                        <td className="text-center py-1 px-2">{s.duracion_minutos} min</td>
+                        <td className="text-right py-1 px-2">${s.precio_unitario.toFixed(2)}</td>
+                        <td className="text-right py-1 px-2">${s.subtotal.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -252,13 +243,13 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               </div>
             )}
 
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ margin: '4px 0' }}><strong>Total:</strong> ${cita.precio_historico_cobrado.toFixed(2)}</p>
-              <p style={{ margin: '4px 0' }}>
+            <div className="mb-4">
+              <p className="my-1"><strong>Total:</strong> ${cita.precio_historico_cobrado.toFixed(2)}</p>
+              <p className="my-1">
                 <strong>Seña pagada:</strong> ${cita.sena_historica_pagada.toFixed(2)} ({cita.metodo_pago_sena})
               </p>
-              <p style={{ margin: '4px 0' }}><strong>Saldo restante:</strong> ${balance.toFixed(2)}</p>
-              <p style={{ margin: '4px 0' }}>
+              <p className="my-1"><strong>Saldo restante:</strong> ${balance.toFixed(2)}</p>
+              <p className="my-1">
                 <strong>Recibido en caja:</strong> ${cita.monto_recibido_en_caja.toFixed(2)}
               </p>
             </div>
@@ -266,8 +257,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
             {isConfirmado && (
               <button
                 type="button"
-                className="button-primary"
-                style={{ width: '100%', padding: '12px 20px', marginBottom: 12 }}
+                className="button-primary w-full mb-3"
                 onClick={() => onMarkAttended(cita)}
               >
                 Marcar como Asistido
@@ -277,18 +267,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
             {/* ── Editar button ── */}
             <button
               type="button"
-              style={{
-                width: '100%',
-                padding: '12px 20px',
-                borderRadius: '6px',
-                border: '1.5px solid var(--primary, #7A1F4A)',
-                background: 'var(--primary-light, #F0E4EA)',
-                color: 'var(--primary, #7A1F4A)',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontSize: '0.95rem',
-                marginBottom: 12,
-              }}
+              className="w-full py-3 px-5 rounded-lg border border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)] font-semibold cursor-pointer text-[0.95rem] mb-3"
               onClick={() => {
                 setEditDate(cita.fecha_hora_cita.slice(0, 16))
                 setEditPrecio(String(cita.precio_historico_cobrado))
@@ -302,8 +281,8 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               ✏️ Editar datos
             </button>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={{ fontWeight: 500, fontSize: '0.9rem' }}>Cambiar estado</label>
+            <div className="flex flex-col gap-2">
+              <label className="font-medium text-[0.9rem]">Cambiar estado</label>
               <select
                 value={cita.estado_cita}
                 onChange={(e) => onStatusChange?.(cita.id, e.target.value)}
@@ -316,17 +295,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
 
               <button
                 type="button"
-                style={{
-                  width: '100%',
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  border: '1.5px solid #EF4444',
-                  background: '#FEF2F2',
-                  color: '#EF4444',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                }}
+                className="w-full py-2.5 px-5 rounded-lg border border-[#EF4444] bg-[#FEF2F2] text-[#EF4444] font-semibold cursor-pointer text-[0.9rem]"
                 onClick={() => {
                   if (window.confirm('¿Eliminar esta cita definitivamente? Esta acción no se puede deshacer.')) {
                     onDelete?.(cita.id)
@@ -341,36 +310,4 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
       </div>
     </div>
   )
-}
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 16,
-}
-
-const modalStyle: React.CSSProperties = {
-  backgroundColor: '#fff',
-  borderRadius: 12,
-  padding: 24,
-  maxWidth: 500,
-  width: '100%',
-  maxHeight: '90vh',
-  overflowY: 'auto',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-}
-
-const closeBtnStyle: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  fontSize: '1.5rem',
-  cursor: 'pointer',
-  lineHeight: 1,
-  padding: '4px 8px',
-  borderRadius: 4,
 }

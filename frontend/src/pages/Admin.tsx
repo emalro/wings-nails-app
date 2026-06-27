@@ -342,9 +342,8 @@ export default function Admin() {
           </div>
           <button
             type="button"
-            className="button-primary"
+            className="button-primary py-2.5 px-5 w-auto"
             onClick={() => setShowManualModal(true)}
-            style={{ width: 'auto', padding: '10px 20px' }}
           >
             Cargar Turno Manual
           </button>

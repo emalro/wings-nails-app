@@ -67,26 +67,19 @@ export default function Login() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '4rem auto', padding: '0 1rem' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '2rem' }}>Ingresar</h1>
+    <div className="max-w-[400px] mx-[auto] my-16 px-4">
+      <h1 className="text-center mb-8">Ingresar</h1>
       {flash && (
         <div
-          style={{
-            backgroundColor: flash.color,
-            color: '#fff',
-            padding: '0.75rem 1rem',
-            borderRadius: 6,
-            marginBottom: '1rem',
-            textAlign: 'center',
-            fontWeight: 600,
-          }}
+          className="text-white py-3 px-4 rounded-md mb-4 text-center font-semibold"
+          style={{ backgroundColor: flash.color }}
         >
           {flash.text}
         </div>
       )}
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="email" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
+        <div className="mb-4">
+          <label htmlFor="email" className="block mb-1 font-semibold">
             Email
           </label>
           <input
@@ -95,13 +88,12 @@ export default function Login() {
             value={form.values.email}
             onChange={(e) => form.setField('email', e.target.value)}
             autoComplete="username"
-            className={form.touched.email && form.errors.email ? 'input-error' : ''}
-            style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc' }}
+            className={`modal-input ${form.touched.email && form.errors.email ? 'input-error' : ''}`}
           />
           <FieldError name="email" errors={form.errors} touched={form.touched} />
         </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="password" style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 600 }}>
+        <div className="mb-4">
+          <label htmlFor="password" className="block mb-1 font-semibold">
             Contraseña
           </label>
           <input
@@ -110,21 +102,19 @@ export default function Login() {
             value={form.values.password}
             onChange={(e) => form.setField('password', e.target.value)}
             autoComplete="current-password"
-            className={form.touched.password && form.errors.password ? 'input-error' : ''}
-            style={{ width: '100%', padding: '0.5rem', borderRadius: 6, border: '1px solid #ccc' }}
+            className={`modal-input ${form.touched.password && form.errors.password ? 'input-error' : ''}`}
           />
           <FieldError name="password" errors={form.errors} touched={form.touched} />
         </div>
         {error && (
-          <div style={{ color: '#dc2626', marginBottom: '1rem', textAlign: 'center' }}>
+          <div className="text-[#dc2626] mb-4 text-center">
             {error}
           </div>
         )}
         <button
           type="submit"
           disabled={submitting || !form.isValid || !form.isDirty}
-          className="navbar-cta"
-          style={{ width: '100%', textAlign: 'center' }}
+          className="navbar-cta w-full text-center"
         >
           {submitting ? 'Ingresando…' : 'Ingresar'}
         </button>

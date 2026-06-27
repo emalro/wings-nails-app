@@ -221,9 +221,9 @@ export default function Reservar() {
   function renderServiceStep() {
     return (
       <>
-        <div className="section-header" style={{ textAlign: 'left', marginBottom: 24 }}>
+        <div className="section-header text-left mb-6">
           <span className="overline">Paso 1 de 4</span>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+          <h2 className="font-[var(--font-display)] text-[1.4rem] mt-1">
             Seleccioná uno o más servicios
           </h2>
         </div>
@@ -233,7 +233,7 @@ export default function Reservar() {
         ) : services.length === 0 ? (
           <div className="empty-state">No hay servicios disponibles.</div>
         ) : (
-          <div className="service-grid" style={{ marginBottom: 32 }}>
+          <div className="service-grid mb-8">
             {services.map((service: Service) => {
               const isSelected = selectedServices.includes(service.id)
               return (
@@ -245,7 +245,7 @@ export default function Reservar() {
                 >
                   <div className="service-card-top">
                     <span className="service-card-title">
-                      {isSelected && <span style={{ marginRight: 6 }}>✓</span>}
+                      {isSelected && <span className="mr-1.5">✓</span>}
                       {service.nombre_servicio}
                     </span>
                     <span className="service-card-price">${service.precio_actual}</span>
@@ -262,8 +262,8 @@ export default function Reservar() {
         )}
 
         {selectedServices.length > 0 && (
-          <div className="summary-card" style={{ marginBottom: 16 }}>
-            <p style={{ margin: 0 }}>
+          <div className="summary-card mb-4">
+            <p className="m-0">
               <strong>{selectedServices.length} servicio{selectedServices.length !== 1 ? 's' : ''} seleccionado{selectedServices.length !== 1 ? 's' : ''}</strong>
               {' — '}Total: <strong>${totalAmount}</strong>
               {' | '}Seña: <strong>${depositAmount}</strong>
@@ -285,9 +285,9 @@ export default function Reservar() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-7">
         <div className="form-card">
-          <div className="section-header" style={{ textAlign: 'left', marginBottom: 20 }}>
+          <div className="section-header text-left mb-5">
             <span className="overline">Paso 2 de 4</span>
-            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', marginTop: 4 }}>
+            <h2 className="font-[var(--font-display)] text-[1.4rem] mt-1">
               Tus datos
             </h2>
           </div>
@@ -389,7 +389,7 @@ export default function Reservar() {
               {selectedServiceList.map((s: Service) => (
                 <p key={s.id}><strong>{s.nombre_servicio}</strong> — ${s.precio_actual}</p>
               ))}
-              <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+              <hr className="my-2 border-none border-t border-[var(--border)]" />
               <p><strong>Duración total:</strong> {totalDuration} min</p>
               <p><strong>Total:</strong> ${totalAmount}</p>
               <p><strong>Seña total:</strong> ${depositAmount}</p>
@@ -466,10 +466,9 @@ export default function Reservar() {
             Volver
           </button>
           <button
-            className="button-primary"
+            className="button-primary flex-1"
             onClick={handleConfirm}
             disabled={submitting}
-            style={{ flex: 1 }}
           >
             {submitting ? 'Confirmando...' : 'Confirmar turno'}
           </button>

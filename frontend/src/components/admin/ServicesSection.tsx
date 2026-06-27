@@ -130,7 +130,7 @@ export default function ServicesSection({
                     Eliminar
                   </button>
                   {!row.activo && (
-                    <span style={{ color: 'var(--muted)', fontSize: '.78rem', alignSelf: 'center' }}>Inactivo</span>
+                    <span className="self-center text-[var(--muted)] text-[.78rem]">Inactivo</span>
                   )}
                 </div>
               ),
@@ -172,7 +172,7 @@ export default function ServicesSection({
                 <button className="button-primary" type="submit" disabled={updateServiceMutation.isPending}>
                   {updateServiceMutation.isPending ? 'Guardando...' : 'Guardar'}
                 </button>
-                <button type="button" onClick={() => setEditingServiceId(null)} style={{ padding: '12px 20px', borderRadius: 'var(--radius-sm)', border: '1.5px solid var(--border)', background: 'var(--surface)', fontWeight: 600, cursor: 'pointer' }}>
+                <button type="button" onClick={() => setEditingServiceId(null)} className="py-3 px-5 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer">
                   Cancelar
                 </button>
               </div>
