@@ -9,7 +9,11 @@ interface SkeletonLoaderProps {
 const WIDTH_CLASSES = ['w-[85%]', 'w-[75%]', 'w-[65%]', 'w-[55%]', 'w-[45%]', 'w-[35%]', 'w-[25%]', 'w-[15%]']
 
 export function SkeletonLoader({ lines = 3, className = '', variant = 'text' }: SkeletonLoaderProps) {
-  const baseClass = 'animate-pulse bg-gray-200 dark:bg-gray-700 rounded'
+  // The skeleton uses the new --surface-container token so it matches
+  // the rest of the rose + lavender palette. The shimmer animation is
+  // in index.css and is gated by the global prefers-reduced-motion
+  // rule.
+  const baseClass = 'animate-pulse bg-surface-container dark:bg-on-surface-variant/20 rounded'
 
   if (variant === 'card') {
     return (
