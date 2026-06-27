@@ -673,10 +673,8 @@ def delete_service(service_id: int, current_user: Usuario = Depends(get_current_
     if not service:
         raise HTTPException(status_code=404, detail="Servicio no encontrado")
 
-    items = session.exec(select(CitaServicio).where(CitaServicio.servicio_id == service_id)).all()
-    for item in items:
-        session.delete(item)
-
+    # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
+    session.exec(text("DELETE FROM citaservicio WHERE servicio_id = :id"), {"id": service_id})
     session.delete(service)
     session.commit()
     return {"ok": True}
@@ -873,10 +871,8 @@ def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
-    items = session.exec(select(CitaServicio).where(CitaServicio.cita_id == appointment_id)).all()
-    for item in items:
-        session.delete(item)
-
+    # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
+    session.exec(text("DELETE FROM citaservicio WHERE cita_id = :id"), {"id": appointment_id})
     session.delete(cita)
     session.commit()
     return {"ok": True}
