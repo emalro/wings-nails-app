@@ -364,7 +364,11 @@ def validate_appointment_hours(
     appointment_end = fecha_hora_cita + timedelta(minutes=service_duration_minutes)
     grace_closing = datetime.combine(fecha_hora_cita.date(), closing) + timedelta(hours=1)
 
-    if appointment_end > grace_closing:
+    # Normalize: strip timezone to avoid naive vs aware comparison
+    def naive(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+    if naive(appointment_end) > naive(grace_closing):
         raise HTTPException(
             422,
             detail=f"El servicio se extiende demasiado más allá del horario de cierre ({effective.hora_cierre})",
@@ -695,18 +699,23 @@ def calculate_duration_for_cita(cita: Cita, session: Session) -> int:
 
 
 def appointment_overlaps(start_a: datetime, end_a: datetime, start_b: datetime, end_b: datetime) -> bool:
-    return start_a < end_b and start_b < end_a
+    # Normalize: strip timezone info to avoid naive vs aware comparison
+    def naive(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    return naive(start_a) < naive(end_b) and naive(start_b) < naive(end_a)
 
 
 def find_conflicting_appointment(start: datetime, duration_minutes: int, session: Session, exclude_id: int | None = None) -> Cita | None:
-    end = start + timedelta(minutes=duration_minutes)
+    # Normalize start to naive for consistent comparison
+    start_naive = start.replace(tzinfo=None) if start.tzinfo else start
+    end = start_naive + timedelta(minutes=duration_minutes)
     active_states = ["Pendiente", "Confirmado"]
     citas = session.exec(select(Cita).where(Cita.estado_cita.in_(active_states))).all()
     for cita in citas:
         if exclude_id is not None and cita.id == exclude_id:
             continue
         cita_end = cita.fecha_hora_cita + timedelta(minutes=calculate_duration_for_cita(cita, session))
-        if appointment_overlaps(start, end, cita.fecha_hora_cita, cita_end):
+        if appointment_overlaps(start_naive, end, cita.fecha_hora_cita, cita_end):
             return cita
     return None
 
