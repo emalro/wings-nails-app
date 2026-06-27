@@ -1,26 +1,51 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
+import { useConfig } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
 import FieldError from '../components/FieldError'
 
-const FLASH_MESSAGES: Record<string, { text: string; color: string }> = {
+type FlashReason = 'auth-required' | 'session-expired'
+
+interface FlashMessage {
+  text: string
+  // CSS variable name (without the var() wrapper). Resolved at render so
+  // a future token rename flows through without a code change.
+  tokenName: '--status-pending' | '--status-cancelled'
+  textTokenName: '--on-background' | '--on-primary'
+}
+
+const FLASH_MESSAGES: Record<FlashReason, FlashMessage> = {
   'auth-required': {
     text: 'Debe iniciar sesión para acceder al panel de administración',
-    color: '#d97706',
+    tokenName: '--status-pending',
+    // Warm gold is the documented exception that fails AA on white; use
+    // a dark text color when the banner sits on a --status-pending
+    // background.
+    textTokenName: '--on-background',
   },
   'session-expired': {
     text: 'Su sesión ha expirado. Inicie sesión nuevamente.',
-    color: '#dc2626',
+    tokenName: '--status-cancelled',
+    textTokenName: '--on-primary',
   },
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function whatsappUrl(number: string): string {
+  if (!number) return '#'
+  return `https://wa.me/${number.replace(/[^0-9]/g, '')}`
+}
+
 export default function Login() {
   const [error, setError] = useState<string | null>(null)
-  const [flash, setFlash] = useState<{ text: string; color: string } | null>(null)
+  const [flash, setFlash] = useState<FlashMessage | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { login } = useAuth()
+  const { data: config } = useConfig()
+  const whatsappHelpUrl = config?.whatsapp_number
+    ? whatsappUrl(config.whatsapp_number)
+    : ''
 
   const form = useFormValidation({
     email: {
@@ -42,7 +67,7 @@ export default function Login() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const reason = params.get('reason')
-    if (reason && FLASH_MESSAGES[reason]) {
+    if (reason && (reason === 'auth-required' || reason === 'session-expired')) {
       setFlash(FLASH_MESSAGES[reason])
     }
   }, [])
@@ -68,11 +93,14 @@ export default function Login() {
 
   return (
     <div className="max-w-[400px] mx-[auto] my-16 px-4">
-      <h1 className="text-center mb-8">Ingresar</h1>
+      <h1 className="text-center mb-8 font-[var(--font-display)] text-[var(--on-background)]">Ingresar</h1>
       {flash && (
         <div
-          className="text-white py-3 px-4 rounded-md mb-4 text-center font-semibold"
-          style={{ backgroundColor: flash.color }}
+          className="py-3 px-4 rounded-md mb-4 text-center font-semibold"
+          style={{
+            backgroundColor: `var(${flash.tokenName})`,
+            color: `var(${flash.textTokenName})`,
+          }}
         >
           {flash.text}
         </div>
@@ -107,7 +135,7 @@ export default function Login() {
           <FieldError name="password" errors={form.errors} touched={form.touched} />
         </div>
         {error && (
-          <div className="text-[#dc2626] mb-4 text-center">
+          <div className="text-[var(--status-cancelled)] mb-4 text-center">
             {error}
           </div>
         )}
@@ -119,6 +147,20 @@ export default function Login() {
           {submitting ? 'Ingresando…' : 'Ingresar'}
         </button>
       </form>
+      {whatsappHelpUrl && (
+        <p className="text-center mt-4 text-sm text-[var(--on-surface-variant)]">
+          ¿Problemas para ingresar?{' '}
+          <a
+            href={whatsappHelpUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[var(--primary)] hover:underline"
+            aria-label="Contactar por WhatsApp"
+          >
+            Escribinos
+          </a>
+        </p>
+      )}
     </div>
   )
 }
