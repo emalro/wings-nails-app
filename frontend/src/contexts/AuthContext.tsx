@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import { api } from '../api'
+import { api, setToken, clearToken } from '../api'
 
 export interface User {
   email: string
@@ -35,7 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.data)
         resolveAuthPromise({ user: response.data, isAuthenticated: true, isLoading: false })
       } catch {
-        // Not authenticated — that's fine
+        // Not authenticated — clear any stale token
+        clearToken()
         setUser(null)
         resolveAuthPromise({ user: null, isAuthenticated: false, isLoading: false })
       } finally {
@@ -47,11 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await api.post('/auth/login', { email, password })
+    setToken(response.data.access_token)
     setUser(response.data.user)
   }, [])
 
   const logout = useCallback(async () => {
     await api.post('/auth/logout')
+    clearToken()
     setUser(null)
   }, [])
 
