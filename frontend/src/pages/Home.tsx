@@ -16,19 +16,48 @@ export default function Home() {
   const { data: services = [], isLoading } = useServices()
   const { data: config } = useConfig()
 
+  const fbUrl = config?.facebook_url || 'https://www.facebook.com/wingsnails.rosario'
+  const igUrl = config?.instagram_url || 'https://www.instagram.com/wings__nails_/'
+  const waUrl = config?.whatsapp_number
+    ? `https://wa.me/${config.whatsapp_number.replace(/[^0-9]/g, '')}`
+    : ''
+  const address = config?.address || 'Rosario, Santa Fe'
+
+  // REQ-VIS-011: bento layout — first card spans 2 cols when there are 3+
+  // services. The grid itself uses auto-fill, minmax(280px, 1fr) so the
+  // number of services doesn't break the layout.
+  const showBentoFeature = services.length >= 3
+
   return (
     <>
-      <section className="hero">
-        <div className="hero-accent" />
-        <h1>Tu estilo,<br />en manos expertas</h1>
+      <section className="hero" aria-labelledby="hero-title">
+        <h1 id="hero-title">Tu estilo,<br />en manos expertas</h1>
         <p>
           En {config?.business_name || 'Nails Studio'} cada detalle importa. Servicios profesionales de
           manicuría y nail design en un ambiente pensado para vos.
         </p>
+        {/* REQ-VIS-005 + REQ-VIS-006: two CTAs above the fold. The rose
+            "Reservar Turno" is the primary action; the lavender WhatsApp
+            CTA is the secondary action. */}
         <div className="hero-actions">
-          <button className="hero-btn-primary" onClick={() => navigate({ to: '/reservar' })}>
-            Reservá tu turno
+          <button
+            className="hero-btn-primary"
+            onClick={() => navigate({ to: '/reservar' })}
+            aria-label="Reservar Turno"
+          >
+            Reservar Turno
           </button>
+          {waUrl.length > 0 && (
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hero-btn-secondary"
+              aria-label="Contactar por WhatsApp"
+            >
+              Contactar por WhatsApp
+            </a>
+          )}
         </div>
       </section>
 
@@ -46,8 +75,11 @@ export default function Home() {
             <div className="empty-state">No hay servicios disponibles por el momento.</div>
           ) : (
             <div className="service-grid">
-              {services.map((service: Service) => (
-                <div key={service.id} className="service-card">
+              {services.map((service: Service, idx: number) => (
+                <div
+                  key={service.id}
+                  className={`service-card${showBentoFeature && idx === 0 ? ' bento-feature' : ''}`}
+                >
                   <div className="service-card-top">
                     <span className="service-card-title">{service.nombre_servicio}</span>
                     <span className="service-card-price">${service.precio_actual}</span>
@@ -64,8 +96,56 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="cta-section">
-        <h2>¿Necesitás hacerte las uñas?</h2>
+      {/* REQ-VIS-006: Conectemos section — WhatsApp rose chip + Instagram
+          lavender chip + Facebook rose-variant chip + address. */}
+      <section className="section section-conectemos" aria-labelledby="conectemos-title">
+        <div className="content">
+          <div className="section-header">
+            <span className="overline">Conectemos</span>
+            <h2 id="conectemos-title">Hablamos por donde te quede más cómodo</h2>
+            <p>Elegí tu canal favorito para reservar, hacer una consulta o ver los últimos diseños.</p>
+          </div>
+          <div className="conectemos-grid">
+            {waUrl.length > 0 && (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="conectemos-chip chip-whatsapp"
+                aria-label="Contactar por WhatsApp"
+              >
+                WhatsApp
+              </a>
+            )}
+            {igUrl.length > 0 && (
+              <a
+                href={igUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="conectemos-chip chip-instagram"
+                aria-label="Ver Instagram"
+              >
+                Instagram
+              </a>
+            )}
+            {fbUrl.length > 0 && (
+              <a
+                href={fbUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="conectemos-chip chip-facebook"
+                aria-label="Ver Facebook"
+              >
+                Facebook
+              </a>
+            )}
+          </div>
+          <p className="conectemos-address">{address}</p>
+        </div>
+      </section>
+
+      <section className="cta-section" aria-labelledby="cta-title">
+        <h2 id="cta-title">¿Necesitás hacerte las uñas?</h2>
         <p>Agendá tu turno online y asegurá tu lugar. Elegí día, horario y servicio sin moverte de tu casa.</p>
         <button className="cta-btn" onClick={() => navigate({ to: '/reservar' })}>
           Reservar Turno
