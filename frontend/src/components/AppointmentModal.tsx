@@ -106,17 +106,17 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
   const displayError = error || saveError
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
-      <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         {/* ── Header ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>
+            <h3 className="m-0 text-1.25rem">
               {cita.cliente_nombre || `Cliente #${cita.id_cliente}`}
             </h3>
-            {editing && <span style={{ fontSize: '0.8rem', color: 'var(--primary, #7A1F4A)', fontWeight: 600 }}>✏️ Modo edición</span>}
+            {editing && <span className="text-xs text-[var(--primary)] font-semibold">✏️ Modo edición</span>}
           </div>
-          <button type="button" onClick={onClose} style={closeBtnStyle}>&times;</button>
+          <button type="button" onClick={onClose} className="bg-none border-none text-1.5rem cursor-pointer leading-none py-1 px-2 rounded">&times;</button>
         </div>
 
         {displayError && (
@@ -134,7 +134,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
                 type="datetime-local"
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
-                style={inputStyle}
+                className="modal-input"
               />
             </div>
 
@@ -144,7 +144,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
                 type="number"
                 value={editPrecio}
                 onChange={(e) => setEditPrecio(e.target.value)}
-                style={inputStyle}
+                className="modal-input"
                 min={0}
               />
             </div>
@@ -155,14 +155,14 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
                 type="number"
                 value={editSena}
                 onChange={(e) => setEditSena(e.target.value)}
-                style={inputStyle}
+                className="modal-input"
                 min={0}
               />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontWeight: 500, fontSize: '0.9rem', display: 'block', marginBottom: 4 }}>Método de pago (seña)</label>
-              <select value={editMetodoPago} onChange={(e) => setEditMetodoPago(e.target.value)} style={inputStyle}>
+              <select value={editMetodoPago} onChange={(e) => setEditMetodoPago(e.target.value)} className="modal-input">
                 <option value="Transferencia">Transferencia</option>
                 <option value="Efectivo">Efectivo</option>
                 <option value="Ninguno">Ninguno</option>
@@ -307,7 +307,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               <select
                 value={cita.estado_cita}
                 onChange={(e) => onStatusChange?.(cita.id, e.target.value)}
-                style={inputStyle}
+                className="modal-input"
               >
                 {statusActions.map((s) => (
                   <option key={s} value={s}>{s}</option>

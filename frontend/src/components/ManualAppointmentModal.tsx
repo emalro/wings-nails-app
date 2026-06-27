@@ -293,13 +293,13 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
   if (!isOpen) return null
 
   return (
-    <div className="manual-modal" style={overlayStyle} onClick={onClose}>
-      <div className="manual-modal-content" style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontFamily: 'var(--font-display, Georgia, serif)' }}>
+    <div className="manual-modal modal-overlay" onClick={onClose}>
+      <div className="manual-modal-content modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="m-0 text-1.25rem font-[var(--font-display)]">
             Cargar Turno Manual
           </h3>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1, padding: '4px 8px' }}>&times;</button>
+          <button type="button" onClick={onClose} className="bg-none border-none text-1.5rem cursor-pointer leading-none py-1 px-2">&times;</button>
         </div>
 
         {error && (
@@ -332,13 +332,11 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
           ) : (
             <div className="client-search-wrapper" style={{ position: 'relative' }}>
               <input
-                className="client-search-input"
+                className="client-search-input modal-input"
                 type="text"
                 value={searchQuery}
                 onChange={handleSearchChange}
-                onFocus={() => { if (searchQuery.length >= 2) setShowDropdown(true) }}
                 placeholder="Buscá por nombre, apellido o teléfono..."
-                style={inputStyle}
               />
               {showDropdown && (
                 <div className="search-dropdown" style={{
@@ -419,19 +417,19 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Nombre *</label>
-                <input value={quickNombre} onChange={e => setQuickNombre(e.target.value)} style={inputStyle} placeholder="Nombre" />
+                <input value={quickNombre} onChange={e => setQuickNombre(e.target.value)} className="modal-input" placeholder="Nombre" />
               </div>
               <div>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Apellido *</label>
-                <input value={quickApellido} onChange={e => setQuickApellido(e.target.value)} style={inputStyle} placeholder="Apellido" />
+                <input value={quickApellido} onChange={e => setQuickApellido(e.target.value)} className="modal-input" placeholder="Apellido" />
               </div>
               <div>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>Teléfono *</label>
-                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} style={inputStyle} placeholder="3411234567" />
+                <input value={quickTelefono} onChange={e => setQuickTelefono(e.target.value)} className="modal-input" placeholder="3411234567" />
               </div>
               <div>
                 <label style={{ fontWeight: 600, fontSize: '0.85rem', display: 'block', marginBottom: 4 }}>DNI *</label>
-                <input value={quickDni} onChange={e => setQuickDni(e.target.value)} style={inputStyle} placeholder="12345678" />
+                <input value={quickDni} onChange={e => setQuickDni(e.target.value)} className="modal-input" placeholder="12345678" />
               </div>
               <button
                 type="button"
@@ -501,13 +499,13 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
               type="date"
               value={appointmentDate}
               onChange={e => setAppointmentDate(e.target.value)}
-              style={inputStyle}
+              className="modal-input"
             />
             <input
               type="time"
               value={appointmentTime}
               onChange={e => setAppointmentTime(e.target.value)}
-              style={inputStyle}
+              className="modal-input"
             />
           </div>
         </div>

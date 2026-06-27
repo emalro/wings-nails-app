@@ -441,6 +441,11 @@
   /* ── Calendar toolbar ── */
   .btn-toolbar { padding: 6px 14px; border: 1.5px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 0.85rem; font-weight: 500; }
 
+  /* ── Modals ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+  .modal-content { background: #fff; border-radius: 14px; padding: 28px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+  .modal-input { width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 0.95rem; background: var(--surface); box-sizing: border-box; }
+
   /* ── Responsive overrides (complex ones kept in @layer) ── */
   @media (max-width: 1000px) {
     .client-section-layout { grid-template-columns: 1fr; }
