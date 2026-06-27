@@ -121,6 +121,15 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
     form.setField('servicios', selectedServiceIds.length > 0)
   }, [selectedServiceIds])
 
+  useEffect(() => {
+    // `new Date('YYYY-MM-DD')` se parsea como UTC; agregar hora lo fuerza a horario local
+    form.setField('fecha', appointmentDate ? `${appointmentDate}T00:00:00` : '')
+  }, [appointmentDate])
+
+  useEffect(() => {
+    form.setField('hora', appointmentTime)
+  }, [appointmentTime])
+
   const { data: searchResults, isLoading: searchLoading } = useClientSearch(debouncedQuery)
 
   // Debounce search query (300ms)
