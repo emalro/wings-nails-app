@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { getStatusColor, getStatusVar } from '../lib/statusColors'
 
 interface AppointmentService {
   servicio_id: number
@@ -38,18 +39,14 @@ interface AppointmentModalProps {
 
 const statusActions = ['Pendiente', 'Confirmado', 'Cancelado_Cliente']
 
-const STATUS_COLORS: Record<string, string> = {
-  Pendiente: '#F59E0B',
-  Confirmado: '#10B981',
-  Asistido: '#6B7280',
-  Cancelado_Cliente: '#EF4444',
-  Cancelado_Sistema_Vencimiento: '#EF4444',
-}
-
-const DEFAULT_COLOR = '#6B7280'
-
 export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended, onStatusChange, onDelete, isPending, error }: AppointmentModalProps) {
-  const statusColor = STATUS_COLORS[cita.estado_cita] || DEFAULT_COLOR
+  // Status badge color comes from the shared module. The fallback to
+  // getStatusVar() returns a CSS-var reference for unknown statuses.
+  const statusColor = getStatusColor(cita.estado_cita) || getStatusVar(cita.estado_cita)
+  // The warm-gold --status-pending fails AA on white; use a dark text
+  // when the badge sits on a pending background.
+  const isPendingStatus = cita.estado_cita === 'Pendiente'
+  const statusTextColor = isPendingStatus ? 'var(--on-background)' : 'var(--on-primary)'
   const balance = cita.precio_historico_cobrado - cita.sena_historica_pagada
   const isConfirmado = cita.estado_cita === 'Confirmado'
   const [editing, setEditing] = useState(false)
@@ -109,7 +106,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
         </div>
 
         {displayError && (
-          <div className="bg-[#FEF2F2] text-[#EF4444] py-2 px-3 rounded-md mb-3 text-[0.9rem]">
+          <div className="bg-[var(--status-cancelled)]/10 text-[var(--status-cancelled)] py-2 px-3 rounded-md mb-3 text-[0.9rem]">
             {displayError}
           </div>
         )}
@@ -204,14 +201,14 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               <p className="my-1">
                 <strong>Estado:</strong>{' '}
                 <span
-                  className="inline-block py-0.5 px-2 rounded text-[#fff] text-[0.85rem] font-semibold"
-                  style={{ backgroundColor: statusColor }}
+                  className="inline-block py-0.5 px-2 rounded text-[0.85rem] font-semibold"
+                  style={{ backgroundColor: statusColor, color: statusTextColor }}
                 >
                   {cita.estado_cita}
                 </span>
               </p>
               {cita.comprobante_verificado_manual && (
-                <p className="my-1 text-[#F59E0B] text-[0.85rem]">
+                <p className="my-1 text-[var(--status-pending)] text-[0.85rem]">
                   ✓ Pago verificado manualmente
                 </p>
               )}
@@ -295,7 +292,7 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
 
               <button
                 type="button"
-                className="w-full py-2.5 px-5 rounded-lg border border-[#EF4444] bg-[#FEF2F2] text-[#EF4444] font-semibold cursor-pointer text-[0.9rem]"
+                className="w-full py-2.5 px-5 rounded-lg border border-[var(--status-cancelled)] bg-[var(--status-cancelled)]/10 text-[var(--status-cancelled)] font-semibold cursor-pointer text-[0.9rem]"
                 onClick={() => {
                   if (window.confirm('¿Eliminar esta cita definitivamente? Esta acción no se puede deshacer.')) {
                     onDelete?.(cita.id)
