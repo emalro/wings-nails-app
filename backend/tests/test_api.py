@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
@@ -27,7 +27,7 @@ client = TestClient(app, base_url="https://testserver")
 # ── Auth setup for protected endpoints ─────────────────────────────────
 # Create a real user and login so the TestClient has auth cookies
 from app.auth import get_password_hash
-from app.models import Usuario
+from app.models import Cita, Cliente, Usuario
 with Session(engine) as session:
     hashed = get_password_hash("testpass123")
     user = Usuario(
@@ -1424,6 +1424,196 @@ def test_busy_slots_and_conflict_detection():
     assert "ocupado" in conflict_resp.json()["detail"]
 
 
+def test_get_busy_slots_handles_aware_datetimes():
+    """Regression: the date-range filter in get_busy_slots compares
+    cita.fecha_hora_cita (aware in production PostgreSQL/Supabase) against
+    start_of_day/end_of_day (naive from datetime.combine). That comparison
+    raises TypeError: can't compare offset-naive and offset-aware datetimes.
+
+    The fix in app/main.py wraps both sides of the comparison in a
+    naive() helper that strips tzinfo. This test verifies the helper
+    exists and behaves correctly. Local SQLite can't reproduce the bug
+    directly because it strips tzinfo on round-trip; production can.
+    """
+    # Importing the helper fails (RED) until the fix is in place.
+    from app.main import naive
+
+    naive_dt = datetime(2026, 7, 15, 10, 0, 0)
+    aware_dt = naive_dt.replace(tzinfo=timezone.utc)
+
+    # naive() on a naive datetime is a no-op
+    assert naive(naive_dt) == naive_dt
+    assert naive(naive_dt).tzinfo is None
+
+    # naive() on an aware datetime strips tzinfo
+    assert naive(aware_dt) == naive_dt
+    assert naive(aware_dt).tzinfo is None
+
+    # The original production crash: comparing aware to naive raises
+    # TypeError. With the helper, the comparison is safe.
+    start_of_day = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = naive_dt.replace(hour=23, minute=59, second=59, microsecond=0)
+    cita_end_aware = aware_dt + timedelta(minutes=60)
+    # No TypeError: both sides normalized via naive()
+    assert not (naive(cita_end_aware) < start_of_day or naive(aware_dt) > end_of_day)
+
+
+def test_delete_asistido_cita_decrements_cliente_counter():
+    """Bug fix: deleting a cita in EstadoCita.asistido must decrement
+    the cliente's cantidad_turnos_abonados counter (which was incremented
+    when the cita transitioned to asistido). Without this, the counter
+    drifts from reality after a delete."""
+    global _test_counter
+    _test_counter = 400
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    # Create the cita
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Transition to Asistido — this should increment the counter to 1
+    patch_resp = client.patch(
+        f"/appointments/{cita_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert patch_resp.status_code == 200, f"PATCH failed: {patch_resp.text}"
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 1
+
+    # Delete the cita — counter must decrement back to 0
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200, f"DELETE failed: {del_resp.text}"
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+
+def test_delete_non_asistido_cita_does_not_change_counter():
+    """Negative case: deleting a cita that was never transitioned to
+    EstadoCita.asistido must NOT touch the counter (no increment
+    happened, so no decrement should happen either)."""
+    global _test_counter
+    _test_counter = 5001
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    # Create the cita (status defaults to Pendiente, not Asistido)
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Counter is 0 (never transitioned to Asistido)
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+    # Delete the cita — counter must stay at 0
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+
+def test_delete_asistido_cita_does_not_make_counter_negative():
+    """Edge case: deleting a cita when the counter is already 0
+    (defensive — should not happen if the increment always pairs
+    with a delete, but safety net) must NOT produce a negative counter."""
+    global _test_counter
+    _test_counter = 402
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Manually reset the counter to 0 to simulate drift before the
+    # transition to Asistido (so when the transition happens the
+    # counter would be 1, but we then put it back to 0 to simulate
+    # the edge case of counter being 0 at delete time).
+    with Session(engine) as session:
+        cliente = session.get(Cliente, client_id)
+        cliente.cantidad_turnos_abonados = 0
+        session.add(cliente)
+        session.commit()
+
+    # Transition to Asistido — this would normally increment to 1
+    patch_resp = client.patch(
+        f"/appointments/{cita_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert patch_resp.status_code == 200
+
+    # Manually reset the counter back to 0 to simulate the drift
+    # scenario (counter is 0 at delete time, but the cita is Asistido)
+    with Session(engine) as session:
+        cliente = session.get(Cliente, client_id)
+        cliente.cantidad_turnos_abonados = 0
+        session.add(cliente)
+        session.commit()
+
+    # Delete the cita — counter must stay at 0 (NOT go to -1)
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+
 # ── REQ-DCO-001: Naive datetime serialization ─────────────────────────────
 
 def test_appointment_datetime_no_z_suffix():
@@ -1766,3 +1956,167 @@ def test_update_appointment_services_change_validates_business_hours():
         ]
     })
     assert r.status_code == 422
+
+
+# ── Deposit validation (seña <= precio) ─────────────────────────────────────
+
+
+def test_servicio_create_with_seña_mayor_que_precio_returns_422():
+    """Deposit validation: monto_sena_actual must be <= precio_actual.
+    A POST with seña > precio must return 422 (currently passes because
+    no such validation exists — the bug)."""
+    payload = {
+        "nombre_servicio": "Manicura Premium",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 3000.0,  # seña > precio → must reject
+        "descripcion": "Test seña validation",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_igual_a_precio_ok():
+    """Boundary: seña == precio is valid (exact match)."""
+    payload = {
+        "nombre_servicio": "Manicura Igual",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 2500.0,  # seña == precio → OK
+        "descripcion": "Test boundary",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_menor_que_precio_ok():
+    """Happy path: seña < precio is valid."""
+    payload = {
+        "nombre_servicio": "Manicura Normal",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,  # seña < precio → OK
+        "descripcion": "Test happy path",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_cero_ok():
+    """Edge case: seña = 0 is valid (deposit-free service)."""
+    payload = {
+        "nombre_servicio": "Manicura Sin Seña",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 0.0,  # seña = 0 → OK
+        "descripcion": "Test zero seña",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_negativa_returns_422():
+    """Edge case: seña < 0 is invalid (negative values not allowed)."""
+    payload = {
+        "nombre_servicio": "Manicura Negativa",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": -100.0,  # negative → must reject
+        "descripcion": "Test negative seña",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_precio_negativo_returns_422():
+    """Edge case: precio < 0 is invalid."""
+    payload = {
+        "nombre_servicio": "Manicura Precio Neg",
+        "duracion_minutos": 60,
+        "precio_actual": -100.0,  # negative → must reject
+        "monto_sena_actual": 50.0,
+        "descripcion": "Test negative precio",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_update_with_both_seña_and_precio_seña_mayor_returns_422():
+    """Update path: when both monto_sena_actual and precio_actual are
+    explicitly set in the same PATCH, the seña > precio rule must apply."""
+    # Create a valid service first
+    create_payload = {
+        "nombre_servicio": "Manicura Update",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Test update",
+        "activo": True,
+    }
+    create_resp = client.post("/services", json=create_payload)
+    assert create_resp.status_code == 200
+    service_id = create_resp.json()["id"]
+
+    # Now PATCH both to invalid values
+    update_payload = {
+        "precio_actual": 1000.0,  # lowered
+        "monto_sena_actual": 2000.0,  # now > precio
+    }
+    resp = client.patch(f"/services/{service_id}", json=update_payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_cita_create_with_sena_mayor_que_precio_returns_422():
+    """Cita validation: sena_historica_pagada must be <= precio_historico_cobrado."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 3000.0,  # sena > precio → must reject
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    resp = client.post("/appointments", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_cita_create_with_sena_cero_ok():
+    """Happy path for Cita: sena = 0 is valid."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 0.0,  # sena = 0 → OK
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    resp = client.post("/appointments", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"

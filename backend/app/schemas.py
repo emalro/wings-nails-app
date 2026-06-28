@@ -2,7 +2,8 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 from .models import EstadoCita
 
 
@@ -82,10 +83,20 @@ class ClienteRead(BaseModel):
 class ServicioCreate(BaseModel):
     nombre_servicio: str
     duracion_minutos: int
-    precio_actual: float
-    monto_sena_actual: float
+    precio_actual: float = Field(ge=0)
+    monto_sena_actual: float = Field(ge=0)
     descripcion: str
     activo: Optional[bool] = True
+
+    @model_validator(mode="after")
+    def check_seña_no_supera_precio(self):
+        if self.monto_sena_actual > self.precio_actual:
+            raise PydanticCustomError(
+                "seña_excede_precio",
+                "La seña ({seña}) no puede superar el precio del servicio ({precio})",
+                {"seña": self.monto_sena_actual, "precio": self.precio_actual},
+            )
+        return self
 
 
 class ServicioRead(ServicioCreate):
@@ -96,10 +107,22 @@ class ServicioRead(ServicioCreate):
 class ServicioUpdate(BaseModel):
     nombre_servicio: Optional[str] = None
     duracion_minutos: Optional[int] = None
-    precio_actual: Optional[float] = None
-    monto_sena_actual: Optional[float] = None
+    precio_actual: Optional[float] = Field(default=None, ge=0)
+    monto_sena_actual: Optional[float] = Field(default=None, ge=0)
     descripcion: Optional[str] = None
     activo: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def check_seña_no_supera_precio(self):
+        # Only validate if both fields are explicitly set in this update.
+        if self.monto_sena_actual is not None and self.precio_actual is not None:
+            if self.monto_sena_actual > self.precio_actual:
+                raise PydanticCustomError(
+                    "seña_excede_precio",
+                    "La seña ({seña}) no puede superar el precio del servicio ({precio})",
+                    {"seña": self.monto_sena_actual, "precio": self.precio_actual},
+                )
+        return self
 
 
 class CitaServicioCreate(BaseModel):
@@ -112,22 +135,43 @@ class CitaServicioCreate(BaseModel):
 class CitaCreate(BaseModel):
     id_cliente: int
     fecha_hora_cita: datetime
-    precio_historico_cobrado: float
-    sena_historica_pagada: float
+    precio_historico_cobrado: float = Field(ge=0)
+    sena_historica_pagada: float = Field(ge=0)
     metodo_pago_sena: Optional[str] = "Transferencia"
     estado_cita: Optional[EstadoCita] = None
     servicios: List[CitaServicioCreate]
+
+    @model_validator(mode="after")
+    def check_sena_no_supera_precio(self):
+        if self.sena_historica_pagada > self.precio_historico_cobrado:
+            raise PydanticCustomError(
+                "sena_excede_precio",
+                "La seña ({sena}) no puede superar el precio de la cita ({precio})",
+                {"sena": self.sena_historica_pagada, "precio": self.precio_historico_cobrado},
+            )
+        return self
 
 
 class CitaUpdate(BaseModel):
     estado_cita: Optional[EstadoCita] = None
     fecha_hora_cita: Optional[datetime] = None
-    monto_recibido_en_caja: Optional[float] = None
+    monto_recibido_en_caja: Optional[float] = Field(default=None, ge=0)
     comprobante_verificado_manual: Optional[bool] = None
-    precio_historico_cobrado: Optional[float] = None
-    sena_historica_pagada: Optional[float] = None
+    precio_historico_cobrado: Optional[float] = Field(default=None, ge=0)
+    sena_historica_pagada: Optional[float] = Field(default=None, ge=0)
     metodo_pago_sena: Optional[str] = None
     servicios: Optional[List[CitaServicioCreate]] = None
+
+    @model_validator(mode="after")
+    def check_sena_no_supera_precio(self):
+        if self.sena_historica_pagada is not None and self.precio_historico_cobrado is not None:
+            if self.sena_historica_pagada > self.precio_historico_cobrado:
+                raise PydanticCustomError(
+                    "sena_excede_precio",
+                    "La seña ({sena}) no puede superar el precio de la cita ({precio})",
+                    {"sena": self.sena_historica_pagada, "precio": self.precio_historico_cobrado},
+                )
+        return self
 
 
 class ConfiguracionUpdate(BaseModel):

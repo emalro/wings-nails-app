@@ -22,6 +22,17 @@ LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
+
+def naive(dt: datetime) -> datetime:
+    """Strip tzinfo from a datetime, leaving naive datetimes unchanged.
+
+    Used to normalize comparisons between datetimes that may be naive
+    (from datetime.combine) or aware (from PostgreSQL TIMESTAMP WITH
+    TIME ZONE columns). Without this, comparing aware vs naive raises
+    TypeError in Python 3.
+    """
+    return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
 def seed_default_config(session: Session) -> None:
     existing = session.get(Configuracion, 1)
     if not existing:
@@ -364,10 +375,6 @@ def validate_appointment_hours(
     appointment_end = fecha_hora_cita + timedelta(minutes=service_duration_minutes)
     grace_closing = datetime.combine(fecha_hora_cita.date(), closing) + timedelta(hours=1)
 
-    # Normalize: strip timezone to avoid naive vs aware comparison
-    def naive(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=None) if dt.tzinfo else dt
-
     if naive(appointment_end) > naive(grace_closing):
         raise HTTPException(
             422,
@@ -699,9 +706,6 @@ def calculate_duration_for_cita(cita: Cita, session: Session) -> int:
 
 
 def appointment_overlaps(start_a: datetime, end_a: datetime, start_b: datetime, end_b: datetime) -> bool:
-    # Normalize: strip timezone info to avoid naive vs aware comparison
-    def naive(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=None) if dt.tzinfo else dt
     return naive(start_a) < naive(end_b) and naive(start_b) < naive(end_a)
 
 
@@ -880,6 +884,15 @@ def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
+    # If the cita was attended, decrement the client's attended-trips
+    # counter (which was incremented when the cita transitioned to
+    # EstadoCita.asistido). Guarded with > 0 to avoid going negative
+    # on edge cases.
+    if cita.estado_cita == EstadoCita.asistido:
+        cliente = session.get(Cliente, cita.id_cliente)
+        if cliente and cliente.cantidad_turnos_abonados > 0:
+            cliente.cantidad_turnos_abonados -= 1
+
     # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
     session.execute(text("DELETE FROM citaservicio WHERE cita_id = :id"), {"id": appointment_id})
     session.delete(cita)
@@ -904,7 +917,9 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
     for cita in citas:
         duration = calculate_duration_for_cita(cita, session)
         cita_end = cita.fecha_hora_cita + timedelta(minutes=duration)
-        if cita_end < start_of_day or cita.fecha_hora_cita > end_of_day:
+        # Normalize via naive() to avoid TypeError when cita is timezone-
+        # aware (PostgreSQL/Supabase) and start_of_day/end_of_day are naive.
+        if naive(cita_end) < start_of_day or naive(cita.fecha_hora_cita) > end_of_day:
             continue
         busy_slots.append({
             "cita_id": cita.id,
