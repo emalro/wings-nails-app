@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
-from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash
+from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
@@ -136,8 +136,34 @@ def seed_admin_user(session: Session) -> None:
     session.add(user)
     session.commit()
 
+def _validate_jwt_secret_key() -> None:
+    """Hard-fail at startup if JWT_SECRET_KEY is missing or too short.
+
+    B-5 (judgment-day): python-jose does not reject an empty/short secret,
+    so the app would silently sign every token with a weak key. Require
+    at least MIN_SECRET_KEY_BYTES (32) bytes to keep the signing key out
+    of brute-force range. The check runs in lifespan so tests that set
+    os.environ["JWT_SECRET_KEY"] before importing the app still work.
+    """
+    import logging
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is not set. Refusing to start: signing tokens "
+            "with an empty key is a critical security failure. See B-5."
+        )
+    if len(secret.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
+        raise RuntimeError(
+            f"JWT_SECRET_KEY is too short ({len(secret)} bytes). "
+            f"Refusing to start: it must be at least {MIN_SECRET_KEY_BYTES} "
+            f"bytes. See B-5."
+        )
+    logging.getLogger(__name__).info("JWT_SECRET_KEY validated.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
+    _validate_jwt_secret_key()
     create_db_and_tables()
     for fn in [run_migration, seed_default_config, seed_default_schedule, seed_admin_user]:
         try:
