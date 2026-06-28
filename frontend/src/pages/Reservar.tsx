@@ -3,6 +3,7 @@ import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useCo
 import { useFormValidation } from '../hooks/useFormValidation'
 import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
 import { getApiError } from '../lib/apiErrors'
+import { normalizePhone } from '../lib/phone'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
@@ -20,6 +21,9 @@ type CreatedAppointment = {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// A-17: the canonical phone format is digits-only (10-11 digits for AR).
+// The form strips formatting before submitting via normalizePhone(), so
+// validation runs on the normalized string. See frontend/src/lib/phone.ts.
 const PHONE_RE = /^\d{10,11}$/
 
 export default function Reservar() {
@@ -47,7 +51,9 @@ export default function Reservar() {
       initial: '',
       rules: [
         { validate: (v: string) => v.trim().length > 0, message: 'El teléfono es obligatorio.' },
-        { validate: (v: string) => PHONE_RE.test(v.trim()), message: 'Ingresá un teléfono válido (10-11 dígitos).' },
+        // A-17: validate on the normalized (digits-only) string so users
+        // can paste a formatted phone and still get accurate feedback.
+        { validate: (v: string) => PHONE_RE.test(normalizePhone(v)), message: 'Ingresá un teléfono válido (10-11 dígitos).' },
       ],
     },
     dni: {
@@ -140,7 +146,9 @@ export default function Reservar() {
       const client = await createClientMutation.mutateAsync({
         nombre: form.values.nombre,
         apellido: form.values.apellido,
-        telefono: form.values.telefono,
+        // A-17: strip formatting before sending so the backend never
+        // sees "+54 (0341) 555-1234" — only digits.
+        telefono: normalizePhone(form.values.telefono),
         dni: form.values.dni,
       })
       const appointmentPayload = {
