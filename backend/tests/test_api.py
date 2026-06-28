@@ -2214,9 +2214,13 @@ def test_update_appointment_services_change_validates_business_hours():
 
 
 def test_servicio_create_with_seña_mayor_que_precio_returns_422():
-    """Deposit validation: monto_sena_actual must be <= precio_actual.
-    A POST with seña > precio must return 422 (currently passes because
-    no such validation exists — the bug)."""
+    """Deposit validation (REQ-DVA-001): monto_sena_actual must be <= precio_actual.
+
+    Regression guard. The validator lives on ServicioCreate.check_seña_no_supera_precio
+    (backend/app/schemas.py) and rejects seña > precio with a PydanticCustomError
+    of type 'seña_excede_precio'. This test pins the contract: a POST with
+    seña > precio must return 422. If a future refactor accidentally drops the
+    validator, this test fails."""
     payload = {
         "nombre_servicio": "Manicura Premium",
         "duracion_minutos": 60,
