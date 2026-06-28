@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 23/06/2026
+> Última actualización: 27/06/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -200,6 +200,54 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **SDD**: openspec/changes/archive/2026-06-22-carga-manual-citas/
 - **Motivo**: Eliminar la dependencia exclusiva del flujo web para crear turnos; la manicurista necesita poder cargar citas telefónicas o presenciales al instante.
 
+### 2026-06-27 — Visual Style Refresh: rose + lavender pastel girly
+
+- **Tipo**: Nueva funcionalidad / Mejora (SDD completo: proposal → spec → design → tasks → apply → verify → archive)
+- **Descripción**: Refresh completo de la identidad visual de la app, de "wine + gold" a una dirección "pastel girly" basada en rosa y lavanda. Toca 24 archivos (21 modificados + 3 nuevos) en 12 commits atómicos bajo `size:exception` formalmente aprobado (forecast 600–750 líneas vs presupuesto de 400).
+  - **Sistema de tokens**: 23 tokens de marca + 4 de estado definidos como CSS custom properties en `:root` dentro de `frontend/src/index.css`. `frontend/tailwind.config.js` espeja los mismos hex bajo un namespace M3-flavor plano (primary, secondary, tertiary, ...). Las clases `brand.*` y `gold.*` huérfanas se retiran. La fuente body pasa de Inter a Plus Jakarta Sans; la display sigue siendo Playfair Display. Preconnect + `display=swap` preservados.
+  - **Wine y gold eliminados**: Los hex wine y gold (los valores previos) ya no aparecen en tokens, gradientes, status colors, box-shadow tints, ni en ningún componente renderizado. Las shadow tints cambian del rgba wine al rgba rose (`rgba(184, 87, 118, ...)`).
+  - **Excepción documentada**: `--status-pending: #D4A85F` (warm gold) se mantiene SOLO para semántica de estado de cita (es el token Pendiente del calendario). Es la única "warm tone" del sistema y está documentada como excepción semántica. White text sobre este color falla AA (~2.5:1); por eso los eventos de calendario y badges sobre `--status-pending` usan text dark (`var(--on-background)`), no white.
+  - **CSS vars como source of truth**: `:root` es la fuente única; `tailwind.config.js theme.extend.colors` es un espejo. Cualquier cambio de hex se hace en ambos archivos en el mismo commit. La verificación del grep retorna 0 matches en `frontend/src/components/`, `frontend/src/pages/`, `frontend/src/App.tsx`, y `frontend/src/lib/`.
+  - **Mapeo de status colors**: El módulo `frontend/src/lib/statusColors.ts` exporta `STATUS_VARS` (referencias CSS-var, preferidas para estilos inline) y `STATUS_COLORS` (hex resueltos via `getComputedStyle`, usados por `react-big-calendar.eventPropGetter`). Cero hex literales en el módulo. Calendario y modales consumen este módulo en lugar de definir `STATUS_COLORS` inline. Mapeo semántico:
+    - Pendiente → `--status-pending` (`#D4A85F` warm gold — dark text)
+    - Confirmado → `--status-confirmed` (`#7A5A8F` lavender)
+    - Asistido → `--status-attended` (`#7AA899` sage)
+    - Cancelado (Cliente + Sistema) → `--status-cancelled` (`#C66B7E` rose)
+  - **A11y baseline**: skip link "Saltar al contenido principal" como primer elemento focuseable de cada página; target `id="main" tabIndex={-1}` en `<main>`; anillo `:focus-visible` global de 2px solid `var(--primary)` + 2px offset; inputs y buttons usan `box-shadow: 0 0 0 3px var(--primary-container)` además del outline; gate global de `prefers-reduced-motion: reduce` que zero todas las transiciones + `scroll-behavior: auto`; mobile drawer con focus trap (Tab/Shift+Tab) + Escape cierra + close button recibe focus al abrir; touch targets: 24×24 mínimo WCAG 2.2 SC 2.5.8, 44×44 para CTAs primarios; `aria-label` en cada icono de navbar y FAB; `aria-modal="true"` + `aria-label` en mobile drawer; `aria-expanded` + `aria-controls` en el toggle hamburguesa.
+  - **ScrollToTop**: nuevo componente flotante rose-tinted glass (único elemento glass del diseño), con `backdrop-filter: blur(8px)` + fallback sólido via `@supports not`. Aparece tras `scrollY > 400`, hidden via `display: none` para sacarlo del a11y tree y tab order. Click mueve focus a `<main id="main">`. Lee `prefers-reduced-motion` para usar `behavior: 'auto'` cuando el usuario prefiere reduced motion.
+  - **Home**: hero radial rose (rose → blush → background) en lugar de linear wine. Dos CTAs sobre el fold: "Reservar Turno" (rose primario) + "Contactar por WhatsApp" (lavender secundario). Bento layout: primer card ocupa 2 columnas en ≥1024px cuando hay ≥3 servicios, grid usa `repeat(auto-fill, minmax(280px, 1fr))` por REQ-VIS-011. Nueva sección Conectemos con 3 chips (WhatsApp rose, Instagram lavender, Facebook rose-variant) + address. CTA section gradient rose → tertiary. Map hint color rose. Chip "Calidad Premium" glass eliminado.
+  - **Reservar**: step machine, validación, busy-slot detection, submit behavior y FAB preservados. Re-skin puramente visual.
+  - **Admin**: calendar, modals, tabs, secciones admin re-skinneadas. Calendar consume `lib/statusColors`. `AppointmentModal`, `MarkAttendedModal`, `ManualAppointmentModal` re-skinneados.
+  - **Login**: flash messages usan `--status-pending` / `--status-cancelled` en lugar de `#d97706` / `#dc2626`. Auth-required (warm gold) usa dark text por la excepción AA. Nuevo "¿Problemas para ingresar? Escribinos" WhatsApp help link con `aria-label="Contactar por WhatsApp"`.
+  - **Compatibilidad hacia atrás**: Aliases en `:root` (`--muted`, `--border`, `--text`, `--text-secondary`, `--bg`, `--primary-light`, `--primary-dark`) apuntan a los tokens nuevos. Permiten que el JSX de los componentes siga usando `text-[var(--muted)]` y `border-[var(--border)]` sin reescritura mecánica. El refactor mecánico `text-[var(x)] → bg-primary` queda fuera de scope y se hace en un change separado.
+- **Archivos afectados**:
+  - `frontend/tailwind.config.js` (modificado) — mirror de tokens
+  - `frontend/src/index.css` (modificado) — :root reescrito, a11y base, BEM re-skin
+  - `frontend/index.html` (modificado) — Plus Jakarta Sans, theme-color
+  - `frontend/src/lib/statusColors.ts` (nuevo)
+  - `frontend/src/components/SkipLink.tsx` (nuevo)
+  - `frontend/src/components/ScrollToTop.tsx` (nuevo)
+  - `frontend/src/App.tsx` (modificado) — shell re-skin + mount SkipLink/ScrollToTop/FAB + focus trap
+  - `frontend/src/pages/Home.tsx` (modificado) — hero radial, bento, dual CTAs, Conectemos
+  - `frontend/src/pages/Reservar.tsx` (modificado) — token swap
+  - `frontend/src/pages/Admin.tsx` (modificado) — token swap
+  - `frontend/src/pages/Login.tsx` (modificado) — flash tokens, WhatsApp help link
+  - `frontend/src/components/Calendar.tsx` (modificado) — token swap
+  - `frontend/src/components/CalendarView.tsx` (modificado) — consume lib/statusColors
+  - `frontend/src/components/AppointmentModal.tsx` (modificado) — consume lib/statusColors
+  - `frontend/src/components/MarkAttendedModal.tsx` (modificado) — error hex → token
+  - `frontend/src/components/ManualAppointmentModal.tsx` (modificado) — wine fallback removido
+  - `frontend/src/components/ClientSection.tsx` (modificado) — token swap
+  - `frontend/src/components/DataTable.tsx` (modificado) — token swap
+  - `frontend/src/components/SkeletonLoader.tsx` (modificado) — `bg-gray-200` → `bg-surface-container`
+  - `frontend/src/components/FieldError.tsx` (sin cambios — el color fluye desde `.field-error` BEM)
+  - `frontend/src/components/admin/{Services,Schedule,Exceptions,BusinessConfig}Section.tsx` (modificados) — token swap
+- **Requisitos**: REQ-VIS-001..013, REQ-FONT-001, REQ-A11Y-001..006 (visual-identity), MRL-006 (mobile-responsive-layout), CAL-007, CAL-008 + CAL-001/CAL-006 modified (admin-agenda-visual), REQ-BKG-002 modified, REQ-BKG-006, REQ-BKG-007 (online-booking), FE-003 (frontend-data-fetching)
+- **SDD**: `openspec/changes/visual-style-refresh/`
+- **Motivo**: La identidad wine + gold leía como "vino y dorado formal" en un negocio de manicuría; la dirección pastel girly (rose + lavender) refleja mejor la marca. La paleta anterior también adolecía de un status color warm gold que entraba en conflicto con la nueva identidad.
+- **Impacto esperado**: Refresh visual completo sin cambios funcionales. Mejor contraste WCAG 2.2 AA en pares críticos. Skip link, focus rings, y motion gate mejoran el acceso a teclado. La excepción `--status-pending` warm gold se mantiene por su significado semántico, no por decoración.
+- **size:exception**: El forecast de diff fue 600–750 líneas vs el presupuesto de revisión de 400. El usuario aprobó formalmente la excepción antes del apply phase; se documentó en `sdd/visual-style-refresh/size-exception` (Engram topic). Se solicitó excepción formal porque la refresh toca toda la app de forma acoplada; partir en chained PRs introduciría estados intermedios donde medio shell usa tokens nuevos y medio usa viejos.
+
 ---
 
 ## Decisiones de diseño (ARCHITECTURE DECISIONS)
@@ -218,6 +266,11 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 | CD workflow | Separado de CI (cd.yml) | Job dentro de ci.yml | Permisos distintos (packages:write) y trigger independiente |
 | Docker | Multi-stage (node build + python runtime) | Build separado + artifact passing | Autocontenido, un solo artifact, sin dependencia entre workflows |
 | Frontend serving | StaticFiles montado en `/` | nginx separado | Sin infraestructura adicional, SPA fallback automático con html=True |
+| CSS tokens | Custom properties en `:root` + espejo en tailwind.config.js | Inline hex en componentes, Sass variables | Single source of truth (`:root`); Tailwind utilities resolviendo al mismo hex; cambia un archivo y cambia la app |
+| Status colors | Módulo TS (`lib/statusColors.ts`) con valores resueltos via `getComputedStyle` | Constantes TS con hex literales hardcodeados | Cero hex literales en el módulo; cualquier cambio de token fluye sin tocar el módulo; `eventPropGetter` de react-big-calendar requiere hex concreto, mientras que estilos inline aceptan `var(...)` |
+| Glassmorphism | Solo ScrollToTop, con `@supports` fallback a solid rose | Glass en hero, chips, cards | Restringido a una única affordance flotante para preservar legibilidad AA y consistencia visual; cualquier otro glass se delega a un follow-up |
+| `--status-pending` warm gold | Mantenido solo para semántica de estado | Eliminarlo por ser warm tone no-rosa | Reconocer el significado semántico (Pendiente = "warm, awaiting") es importante para el admin; dark text compensa el contraste AA fallido |
+| A11y baseline | Global rules en `@layer base` (focus-visible, reduced-motion, skip-link) + componentes focales | Per-component a11y attributes | El single source de reglas globales reduce el riesgo de olvidar la a11y en un componente nuevo; los componentes focales (SkipLink, ScrollToTop) sólo necesitan el contrato del BEM |
 
 ---
 

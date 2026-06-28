@@ -28,7 +28,6 @@ export default function ScheduleSection({
 }: ScheduleSectionProps) {
   return (
     <>
-      <h3>Horarios de Atención</h3>
       {scheduleMessage && <div className="status-notice success">{scheduleMessage}</div>}
 
       <h4>Horario semanal</h4>

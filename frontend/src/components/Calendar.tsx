@@ -83,7 +83,8 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
   }
 
   function getFirstDayOfMonth(date: Date) {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay()
+    // Monday-first: shift so Monday=0, Tuesday=1, ..., Sunday=6
+    return (new Date(date.getFullYear(), date.getMonth(), 1).getDay() + 6) % 7
   }
 
   function handleDateClick(day: number) {
@@ -125,7 +126,7 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
       </div>
 
       <div className="calendar-grid">
-        {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'].map(day => (
+        {['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'].map(day => (
           <div key={day} className="calendar-day-header">{day}</div>
         ))}
         {calendarDays.map((day, idx) => {

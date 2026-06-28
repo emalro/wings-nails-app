@@ -4,6 +4,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { useEffectiveHours } from '../hooks'
+import { getStatusColor, getStatusVar } from '../lib/statusColors'
 
 interface AppointmentService {
   servicio_id: number
@@ -51,7 +52,7 @@ const locales = {
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek,
+  startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 1, locale: es }),
   getDay,
   locales,
 })
@@ -70,15 +71,9 @@ const calendarFormats = {
     format(start, 'HH:mm', { locale: es }) + ' - ' + format(end, 'HH:mm', { locale: es }),
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  Pendiente: '#F59E0B',
-  Confirmado: '#10B981',
-  Asistido: '#6B7280',
-  Cancelado_Cliente: '#EF4444',
-  Cancelado_Sistema_Vencimiento: '#EF4444',
-}
-
-const DEFAULT_COLOR = '#6B7280'
+// Status colors are sourced from the shared lib/statusColors module; the
+// values resolve from --status-* CSS variables defined in :root. There
+// are no raw hex literals here — see REQ-VIS-010.
 
 export default function CalendarView({ appointments, loading, onEventClick }: CalendarViewProps) {
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches
@@ -112,14 +107,25 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
   })
 
   const eventPropGetter: EventPropGetter<CalendarEvent> = (event) => {
-    const color = STATUS_COLORS[event.status] || DEFAULT_COLOR
+    // react-big-calendar expects a concrete color value here, so we
+    // resolve the CSS-var reference to the actual hex at runtime via
+    // getStatusColor. The fallback to getStatusVar() returns a CSS
+    // variable reference which the browser can also use for
+    // backgroundColor in modern engines — but the resolved value keeps
+    // the calendar renderer predictable across all browsers.
+    const color = getStatusColor(event.status) || getStatusVar(event.status)
+    // The warm-gold --status-pending is the documented exception that
+    // does not pass WCAG 2.2 AA on white. We use a dark text on
+    // pending events (matching the spec's REQ-A11Y-004 contrast
+    // guidance) and white text on every other status.
+    const isPending = event.status === 'Pendiente'
     return {
       style: {
         backgroundColor: color,
         borderColor: color,
         borderRadius: '4px',
-        opacity: 0.85,
-        color: '#fff',
+        opacity: 0.9,
+        color: isPending ? 'var(--on-background)' : '#fff',
         fontSize: '0.85rem',
         fontWeight: 500,
         padding: '2px 4px',

@@ -87,7 +87,7 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
         </div>
 
         {error && (
-          <div className="text-[#EF4444] text-[0.9rem] mb-3 py-2 px-3 bg-[#FEF2F2] rounded-md">
+          <div className="text-[var(--status-cancelled)] text-[0.9rem] mb-3 py-2 px-3 bg-[var(--status-cancelled)]/10 rounded-md">
             {error}
           </div>
         )}
