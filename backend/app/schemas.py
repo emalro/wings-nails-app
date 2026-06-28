@@ -168,10 +168,10 @@ class CitaCreate(BaseModel):
             )
         return self
 
-    @field_validator("fecha_hora_cita", mode="before")
+    @field_validator("fecha_hora_cita", mode="after")
     @classmethod
     def _accept_naive_or_aware(cls, v):
-        return v.replace(tzinfo=None) if hasattr(v, "tzinfo") and v.tzinfo else v
+        return v.replace(tzinfo=None) if v.tzinfo else v
 
 
 class CitaUpdate(BaseModel):
@@ -195,10 +195,10 @@ class CitaUpdate(BaseModel):
                 )
         return self
 
-    @field_validator("fecha_hora_cita", mode="before")
+    @field_validator("fecha_hora_cita", mode="after")
     @classmethod
     def _accept_naive_or_aware(cls, v):
-        return v.replace(tzinfo=None) if hasattr(v, "tzinfo") and v.tzinfo else v
+        return v.replace(tzinfo=None) if v.tzinfo else v
 
 
 class ConfiguracionUpdate(BaseModel):

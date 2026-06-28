@@ -1752,7 +1752,7 @@ def test_appointment_datetime_aware_input_serializes_naive():
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
-    # Smoke: POST with Z suffix succeeds (validates input, not the bug)
+    # Smoke: POST with Z suffix succeeds AND round-trips naive (REQ-DCO-005 W-1)
     payload = {
         "id_cliente": client_id,
         "fecha_hora_cita": "2026-06-29T10:00:00Z",
@@ -1763,6 +1763,37 @@ def test_appointment_datetime_aware_input_serializes_naive():
     }
     r = client.post("/appointments", json=payload)
     assert r.status_code == 200
+    data = r.json()
+    # The response is naive (CitaRead @field_serializer strips tzinfo),
+    # so we cannot distinguish the two validator modes from the response
+    # alone on SQLite. The real input-side assertion is at the DB level:
+    # Pydantic must store the datetime WITHOUT tzinfo. A validator with
+    # mode="before" lets the string pass through to Pydantic which parses
+    # it to an aware datetime; SQLite's driver then strips tzinfo on write,
+    # so even the buggy path happens to land on a naive value. The honest
+    # assertion is therefore on the Pydantic-validated model: did the
+    # validator run and normalize the datetime?
+    #
+    # We probe that by re-parsing the request body the same way the
+    # endpoint does — through CitaCreate.model_validate. The validator
+    # with mode="after" runs after Pydantic parses the string, so the
+    # resulting fecha_hora_cita MUST be naive. With mode="before", the
+    # validator sees a raw string and returns it unchanged; Pydantic then
+    # parses to aware and the validator does NOT fire.
+    from app.schemas import CitaCreate
+    reparsed = CitaCreate.model_validate({
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2026-06-29T10:00:00Z",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [],
+    })
+    assert reparsed.fecha_hora_cita.tzinfo is None, (
+        f"W-1 REGRESSION: validator did not normalize aware datetime parsed from "
+        f"Z-suffix string. fecha_hora_cita={reparsed.fecha_hora_cita!r} "
+        f"tzinfo={reparsed.fecha_hora_cita.tzinfo!r}. "
+        f"The validator must run AFTER Pydantic parses the string (mode='after')."
+    )
 
 
 def test_get_busy_slots_handles_aware_datetime():
