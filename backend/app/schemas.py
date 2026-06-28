@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from .models import EstadoCita
 
@@ -10,6 +10,19 @@ from .models import EstadoCita
 def normalize_phone(phone: str) -> str:
     """Strip everything except digits. Reusable in validation AND search."""
     return re.sub(r"\D", "", phone)
+
+
+def _strip_tz(v: datetime) -> str:
+    """Serialize datetime to ISO without tzinfo suffix (REQ-DCO-004).
+
+    Pydantic v2's default datetime serializer appends `Z` to aware datetimes
+    (e.g. those returned by PostgreSQL TIMESTAMP WITH TIME ZONE). That
+    suffix causes JavaScript Date parsers in Argentina (UTC-3) to shift
+    the wall-clock hour by 3. The system operates in a single timezone
+    (Argentina), so wall-clock time is the only time that matters.
+    Naive datetimes pass through unchanged.
+    """
+    return v.replace(tzinfo=None).isoformat() if v.tzinfo else v.isoformat()
 
 
 class ClienteCreate(BaseModel):
@@ -78,6 +91,10 @@ class ClienteRead(BaseModel):
     cantidad_turnos_abonados: int
     cantidad_turnos_cancelados_vencidos: int
     telefonos: list[ClienteTelefonoRead]
+
+    @field_serializer("fecha_creacion")
+    def _ser_fecha_creacion(self, v: datetime) -> str:
+        return _strip_tz(v)
 
 
 class ServicioCreate(BaseModel):
@@ -262,6 +279,10 @@ class CitaRead(BaseModel):
     fecha_registro_cita: datetime
     duracion_total_minutos: int = 0
     servicios: List[CitaServicioRead] = []
+
+    @field_serializer("fecha_hora_cita", "fecha_registro_cita")
+    def _ser_fechas(self, v: datetime) -> str:
+        return _strip_tz(v)
 
 
 # Auth schemas
