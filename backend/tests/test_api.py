@@ -1956,3 +1956,167 @@ def test_update_appointment_services_change_validates_business_hours():
         ]
     })
     assert r.status_code == 422
+
+
+# ── Deposit validation (seña <= precio) ─────────────────────────────────────
+
+
+def test_servicio_create_with_seña_mayor_que_precio_returns_422():
+    """Deposit validation: monto_sena_actual must be <= precio_actual.
+    A POST with seña > precio must return 422 (currently passes because
+    no such validation exists — the bug)."""
+    payload = {
+        "nombre_servicio": "Manicura Premium",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 3000.0,  # seña > precio → must reject
+        "descripcion": "Test seña validation",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_igual_a_precio_ok():
+    """Boundary: seña == precio is valid (exact match)."""
+    payload = {
+        "nombre_servicio": "Manicura Igual",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 2500.0,  # seña == precio → OK
+        "descripcion": "Test boundary",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_menor_que_precio_ok():
+    """Happy path: seña < precio is valid."""
+    payload = {
+        "nombre_servicio": "Manicura Normal",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,  # seña < precio → OK
+        "descripcion": "Test happy path",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_cero_ok():
+    """Edge case: seña = 0 is valid (deposit-free service)."""
+    payload = {
+        "nombre_servicio": "Manicura Sin Seña",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 0.0,  # seña = 0 → OK
+        "descripcion": "Test zero seña",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_seña_negativa_returns_422():
+    """Edge case: seña < 0 is invalid (negative values not allowed)."""
+    payload = {
+        "nombre_servicio": "Manicura Negativa",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": -100.0,  # negative → must reject
+        "descripcion": "Test negative seña",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_create_with_precio_negativo_returns_422():
+    """Edge case: precio < 0 is invalid."""
+    payload = {
+        "nombre_servicio": "Manicura Precio Neg",
+        "duracion_minutos": 60,
+        "precio_actual": -100.0,  # negative → must reject
+        "monto_sena_actual": 50.0,
+        "descripcion": "Test negative precio",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_servicio_update_with_both_seña_and_precio_seña_mayor_returns_422():
+    """Update path: when both monto_sena_actual and precio_actual are
+    explicitly set in the same PATCH, the seña > precio rule must apply."""
+    # Create a valid service first
+    create_payload = {
+        "nombre_servicio": "Manicura Update",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Test update",
+        "activo": True,
+    }
+    create_resp = client.post("/services", json=create_payload)
+    assert create_resp.status_code == 200
+    service_id = create_resp.json()["id"]
+
+    # Now PATCH both to invalid values
+    update_payload = {
+        "precio_actual": 1000.0,  # lowered
+        "monto_sena_actual": 2000.0,  # now > precio
+    }
+    resp = client.patch(f"/services/{service_id}", json=update_payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_cita_create_with_sena_mayor_que_precio_returns_422():
+    """Cita validation: sena_historica_pagada must be <= precio_historico_cobrado."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 3000.0,  # sena > precio → must reject
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    resp = client.post("/appointments", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_cita_create_with_sena_cero_ok():
+    """Happy path for Cita: sena = 0 is valid."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 0.0,  # sena = 0 → OK
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    resp = client.post("/appointments", json=payload)
+    assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
