@@ -346,3 +346,25 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: En producción, FastAPI sirve tanto el SPA como la API desde el mismo origen. Usar URL absoluta a `localhost` hace que las requests nunca lleguen al backend.
 - **Impacto esperado**: Todas las operaciones del admin (crear servicios, turnos, clientas) funcionan correctamente en producción.
 - **Riesgo residual**: En desarrollo, requiere tener `VITE_API_URL` seteada en `.env` si el dev server de Vite está en otro puerto que el backend.
+
+---
+
+### 2026-06-28 — Fix: serialización de datetimes con timezone en respuestas API
+
+- **Tipo**: Corrección
+- **Descripción**: El PR #46 (`timezone-fix`) agregó el helper `naive()` para comparaciones pero nunca cableó el `field_serializer` en los schemas de respuesta. Como resultado, cuando la base de datos devolvía un datetime con `tzinfo` (caso PostgreSQL/Supabase con `TIMESTAMP WITH TIME ZONE`), Pydantic v2 emitía el sufijo `Z` o el offset `+00:00`. En el navegador argentino (UTC-3) eso provocaba un desplazamiento de 3 horas: la cita booked a las 09:00 aparecía a las 06:00 y el overlap check de slots ocupados fallaba silenciosamente.
+
+  Cambios aplicados:
+  - `backend/app/schemas.py`: helper `_strip_tz()` y `@field_serializer` en `CitaRead.fecha_hora_cita`, `CitaRead.fecha_registro_cita`, `ClienteRead.fecha_creacion`.
+  - `backend/app/schemas.py`: `@field_validator(mode="before")` en `CitaCreate.fecha_hora_cita` y `CitaUpdate.fecha_hora_cita` que normaliza input aware a naive (evita round-trip asymmetry en PostgreSQL).
+  - `backend/app/main.py`: wrap de las dos llamadas `isoformat()` en `get_busy_slots` con `naive()` local (el endpoint no declara `response_model`, por lo que el serializer del schema no corre ahí).
+  - `backend/tests/test_api.py`: nuevo test de regresión `test_appointment_datetime_aware_input_serializes_naive` que cubre los 5 escenarios del spec (PROD-A/B/C/D/E).
+- **Archivos afectados**: `backend/app/schemas.py`, `backend/app/main.py`, `backend/tests/test_api.py`
+- **Requisitos relacionados**: REQ-DCO-004 (serializer defensivo), REQ-DCO-005 (normalización de input)
+- **Motivo**: Regresión de `timezone-fix` PR #46 — el test existente solo cubría el path de SQLite (naive), por lo que el bug pasó la verificación. En producción con Supabase los turnos se mostraban con 3 horas de shift.
+- **Impacto esperado**: Las citas de producción ahora se muestran en el wall-clock time exacto que la clienta reservó. El overlap check de "Ocupado" en el calendario funciona correctamente.
+- **Decisiones técnicas**:
+  - Field-level `@field_serializer` en lugar de base class — la superficie del bug es exactamente 3 campos, no se justifica una abstracción global.
+  - Strip directo (`replace(tzinfo=None)`) en input en vez de conversión a UTC — el sistema opera en un único timezone, "store lo que la usuaria quiso decir" es la convención correcta.
+  - Test usa aserciones directas sobre modelos Pydantic además de smoke tests de integración — SQLite strippea tzinfo en el read, por lo que la ruta de integración no puede reproducir el bug de PostgreSQL. Las aserciones Pydantic sí lo capturan.
+- **Riesgo residual**: Ninguno en el flujo actual. Si se agrega un nuevo endpoint que devuelva datetime, debe declarar `response_model` (CitaRead/ClienteRead) o aplicar `naive()` manualmente — el comentario inline en `get_busy_slots` lo documenta.

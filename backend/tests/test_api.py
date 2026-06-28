@@ -1655,6 +1655,193 @@ def test_appointment_datetime_no_z_suffix():
     assert not fecha_get.endswith("Z"), f"GET response has Z suffix: {fecha_get}"
 
 
+def test_appointment_datetime_aware_input_serializes_naive():
+    """REQ-DCO-004 + REQ-DCO-005: Aware datetimes serialize naive; Z/offset inputs normalized.
+
+    SQLite strips tzinfo on DB read, so the integration path can't reproduce
+    the production (PostgreSQL/Supabase) failure mode. The direct Pydantic
+    model assertions below simulate the aware-datetime path that production
+    would exhibit, and will fail on current code (where Pydantic emits Z
+    suffix) and pass after the fix. The integration smoke tests verify
+    wiring (response_model, endpoint contracts) but don't catch the bug
+    themselves due to SQLite's tzinfo-stripping behavior.
+    """
+    import json
+    from app.models import EstadoCita
+    from app.schemas import CitaRead, ClienteRead, CitaCreate, CitaUpdate
+
+    # Simulate the production aware-UTC datetime path
+    aware_dt = datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc)
+
+    # --- Direct Pydantic model assertions (catch the serializer/validator bug) ---
+
+    # PROD-A: CitaRead.fecha_hora_cita with aware datetime serializes naive
+    cita_read = CitaRead(
+        id=999,
+        id_cliente=1,
+        cliente_nombre="Test",
+        fecha_hora_cita=aware_dt,
+        precio_historico_cobrado=2500.0,
+        sena_historica_pagada=500.0,
+        comprobante_transferencia_url=None,
+        comprobante_verificado_manual=False,
+        monto_recibido_en_caja=0.0,
+        estado_cita=EstadoCita.pendiente,
+        metodo_pago_sena="Transferencia",
+        fecha_registro_cita=aware_dt,
+        duracion_total_minutos=0,
+        servicios=[],
+    )
+    cita_json = cita_read.model_dump_json()
+    cita_dict = json.loads(cita_json)
+    assert cita_dict["fecha_hora_cita"] == "2026-06-29T09:00:00", \
+        f"PROD-A: CitaRead.fecha_hora_cita serialized as {cita_dict['fecha_hora_cita']!r}"
+    assert "Z" not in cita_json, f"PROD-A: CitaRead JSON contains Z: {cita_json[:200]}"
+
+    # PROD-C: ClienteRead.fecha_creacion with aware datetime serializes naive
+    cliente_read = ClienteRead(
+        id=1,
+        nombre="Test",
+        apellido="User",
+        dni="12345678",
+        activo=True,
+        fecha_creacion=aware_dt,
+        cantidad_turnos_tomados=0,
+        cantidad_turnos_abonados=0,
+        cantidad_turnos_cancelados_vencidos=0,
+        telefonos=[],
+    )
+    cliente_json = cliente_read.model_dump_json()
+    cliente_dict = json.loads(cliente_json)
+    assert cliente_dict["fecha_creacion"] == "2026-06-29T09:00:00", \
+        f"PROD-C: ClienteRead.fecha_creacion serialized as {cliente_dict['fecha_creacion']!r}"
+    assert "Z" not in cliente_json, f"PROD-C: ClienteRead JSON contains Z: {cliente_json[:200]}"
+
+    # PROD-D (POST): CitaCreate normalizes aware datetime to naive
+    cita_create = CitaCreate(
+        id_cliente=1,
+        fecha_hora_cita=aware_dt,
+        precio_historico_cobrado=2500.0,
+        sena_historica_pagada=500.0,
+        servicios=[],
+    )
+    assert cita_create.fecha_hora_cita == datetime(2026, 6, 29, 9, 0), \
+        f"PROD-D: CitaCreate did not normalize aware datetime: {cita_create.fecha_hora_cita!r}"
+    assert cita_create.fecha_hora_cita.tzinfo is None, \
+        f"PROD-D: CitaCreate.fecha_hora_cita still has tzinfo: {cita_create.fecha_hora_cita.tzinfo}"
+
+    # PROD-D (PATCH): CitaUpdate also normalizes aware datetime to naive
+    cita_update = CitaUpdate(fecha_hora_cita=aware_dt)
+    assert cita_update.fecha_hora_cita == datetime(2026, 6, 29, 9, 0), \
+        f"PROD-D: CitaUpdate did not normalize aware datetime: {cita_update.fecha_hora_cita!r}"
+    assert cita_update.fecha_hora_cita.tzinfo is None, \
+        f"PROD-D: CitaUpdate.fecha_hora_cita still has tzinfo: {cita_update.fecha_hora_cita.tzinfo}"
+
+    # PROD-E (negative): direct CitaRead JSON contains no Z or +00:00
+    assert "Z" not in cita_json, "PROD-E: CitaRead JSON contains Z"
+    assert "+00:00" not in cita_json, "PROD-E: CitaRead JSON contains +00:00"
+    assert "Z" not in cliente_json, "PROD-E: ClienteRead JSON contains Z"
+    assert "+00:00" not in cliente_json, "PROD-E: ClienteRead JSON contains +00:00"
+
+    # --- Integration smoke tests (verify wiring, not bug reproduction) ---
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    # Smoke: busy_slots endpoint returns valid response
+    r = client.get("/busy_slots", params={"date_str": "2026-06-29"})
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+    # Smoke: POST with Z suffix succeeds AND round-trips naive (REQ-DCO-005 W-1)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2026-06-29T10:00:00Z",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [{"servicio_id": service_id, "duracion_minutos": 60,
+                       "precio_unitario": 2500.0, "subtotal": 2500.0}],
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    # The response is naive (CitaRead @field_serializer strips tzinfo),
+    # so we cannot distinguish the two validator modes from the response
+    # alone on SQLite. The real input-side assertion is at the DB level:
+    # Pydantic must store the datetime WITHOUT tzinfo. A validator with
+    # mode="before" lets the string pass through to Pydantic which parses
+    # it to an aware datetime; SQLite's driver then strips tzinfo on write,
+    # so even the buggy path happens to land on a naive value. The honest
+    # assertion is therefore on the Pydantic-validated model: did the
+    # validator run and normalize the datetime?
+    #
+    # We probe that by re-parsing the request body the same way the
+    # endpoint does — through CitaCreate.model_validate. The validator
+    # with mode="after" runs after Pydantic parses the string, so the
+    # resulting fecha_hora_cita MUST be naive. With mode="before", the
+    # validator sees a raw string and returns it unchanged; Pydantic then
+    # parses to aware and the validator does NOT fire.
+    from app.schemas import CitaCreate
+    reparsed = CitaCreate.model_validate({
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2026-06-29T10:00:00Z",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [],
+    })
+    assert reparsed.fecha_hora_cita.tzinfo is None, (
+        f"W-1 REGRESSION: validator did not normalize aware datetime parsed from "
+        f"Z-suffix string. fecha_hora_cita={reparsed.fecha_hora_cita!r} "
+        f"tzinfo={reparsed.fecha_hora_cita.tzinfo!r}. "
+        f"The validator must run AFTER Pydantic parses the string (mode='after')."
+    )
+
+
+def test_get_busy_slots_handles_aware_datetime():
+    """REQ-DCO-004 C-1 REGRESSION: get_busy_slots must not crash on aware datetimes.
+
+    On PostgreSQL (production), `fecha_hora_cita` comes back as an aware UTC
+    datetime. The comparison at main.py:907 mixes that aware value with the
+    naive `start_of_day` / `end_of_day` derived from `datetime.combine(...)`,
+    which raises `TypeError: can't compare offset-naive and offset-aware
+    datetimes`. The endpoint then returns 500 BEFORE the local `naive()`
+    helper (defined inside the for-loop) is reached.
+
+    SQLite cannot reproduce this failure mode because its driver strips
+    `tzinfo` on read. To simulate the production behavior on the test
+    stack, this test patches the DB read path so the cita list contains
+    a MagicMock carrying an aware UTC datetime — exactly what PostgreSQL
+    hands us in production.
+    """
+    from unittest.mock import patch, MagicMock
+    from app.models import Cita, EstadoCita
+    from app.database import get_session
+
+    # Simulate the production aware-UTC datetime path
+    aware_cita = MagicMock()
+    aware_cita.id = 9999
+    aware_cita.estado_cita = EstadoCita.pendiente
+    aware_cita.fecha_hora_cita = datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc)
+
+    fake_session = MagicMock()
+    fake_session.exec.return_value.all.return_value = [aware_cita]
+
+    app.dependency_overrides[get_session] = lambda: fake_session
+    try:
+        with patch("app.main.calculate_duration_for_cita", return_value=60):
+            r = client.get("/busy_slots", params={"date_str": "2026-06-29"})
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert r.status_code == 200, (
+        f"Expected 200 but got {r.status_code}: {r.text}. "
+        "Aware datetime mixed with naive start_of_day/end_of_day crashes the comparison."
+    )
+    data = r.json()
+    assert any(s["cita_id"] == 9999 for s in data), (
+        f"Expected cita 9999 in busy_slots, got: {data}"
+    )
+
+
 def test_appointment_datetime_preserves_naive_input():
     """REQ-DCO-002: Frontend sends naive datetime, backend stores it unchanged."""
     client_id, service_id, _ = _new_test_client_service()

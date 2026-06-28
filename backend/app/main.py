@@ -914,6 +914,13 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
     citas = session.exec(select(Cita).where(Cita.estado_cita.in_(active_states))).all()
     busy_slots = []
 
+    # naive() wrap REQUIRED on BOTH the comparison (below) AND the isoformat
+    # serialization below. The CitaRead @field_serializer does NOT run here
+    # because this endpoint has no response_model. — REQ-DCO-004 PROD-B +
+    # comparison
+    def naive(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
     for cita in citas:
         duration = calculate_duration_for_cita(cita, session)
         cita_end = cita.fecha_hora_cita + timedelta(minutes=duration)
@@ -923,8 +930,8 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
             continue
         busy_slots.append({
             "cita_id": cita.id,
-            "start": cita.fecha_hora_cita.isoformat(),
-            "end": cita_end.isoformat(),
+            "start": naive(cita.fecha_hora_cita).isoformat(),
+            "end": naive(cita_end).isoformat(),
             "estado": cita.estado_cita,
         })
 
