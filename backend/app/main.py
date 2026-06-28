@@ -19,7 +19,10 @@ from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Conf
 from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+# COOKIE_SECURE defaults to TRUE so production cookies always carry the
+# Secure flag. Local dev (plain http://) opts out by setting COOKIE_SECURE=false
+# in .env. render.yaml explicitly sets it to "true" — see B-6.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 
