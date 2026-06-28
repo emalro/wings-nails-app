@@ -1765,6 +1765,52 @@ def test_appointment_datetime_aware_input_serializes_naive():
     assert r.status_code == 200
 
 
+def test_get_busy_slots_handles_aware_datetime():
+    """REQ-DCO-004 C-1 REGRESSION: get_busy_slots must not crash on aware datetimes.
+
+    On PostgreSQL (production), `fecha_hora_cita` comes back as an aware UTC
+    datetime. The comparison at main.py:907 mixes that aware value with the
+    naive `start_of_day` / `end_of_day` derived from `datetime.combine(...)`,
+    which raises `TypeError: can't compare offset-naive and offset-aware
+    datetimes`. The endpoint then returns 500 BEFORE the local `naive()`
+    helper (defined inside the for-loop) is reached.
+
+    SQLite cannot reproduce this failure mode because its driver strips
+    `tzinfo` on read. To simulate the production behavior on the test
+    stack, this test patches the DB read path so the cita list contains
+    a MagicMock carrying an aware UTC datetime — exactly what PostgreSQL
+    hands us in production.
+    """
+    from unittest.mock import patch, MagicMock
+    from app.models import Cita, EstadoCita
+    from app.database import get_session
+
+    # Simulate the production aware-UTC datetime path
+    aware_cita = MagicMock()
+    aware_cita.id = 9999
+    aware_cita.estado_cita = EstadoCita.pendiente
+    aware_cita.fecha_hora_cita = datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc)
+
+    fake_session = MagicMock()
+    fake_session.exec.return_value.all.return_value = [aware_cita]
+
+    app.dependency_overrides[get_session] = lambda: fake_session
+    try:
+        with patch("app.main.calculate_duration_for_cita", return_value=60):
+            r = client.get("/busy_slots", params={"date_str": "2026-06-29"})
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert r.status_code == 200, (
+        f"Expected 200 but got {r.status_code}: {r.text}. "
+        "Aware datetime mixed with naive start_of_day/end_of_day crashes the comparison."
+    )
+    data = r.json()
+    assert any(s["cita_id"] == 9999 for s in data), (
+        f"Expected cita 9999 in busy_slots, got: {data}"
+    )
+
+
 def test_appointment_datetime_preserves_naive_input():
     """REQ-DCO-002: Frontend sends naive datetime, backend stores it unchanged."""
     client_id, service_id, _ = _new_test_client_service()
