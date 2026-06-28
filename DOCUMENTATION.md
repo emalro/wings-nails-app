@@ -384,3 +384,19 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
   - Strip directo (`replace(tzinfo=None)`) en input en vez de conversión a UTC — el sistema opera en un único timezone, "store lo que la usuaria quiso decir" es la convención correcta.
   - Test usa aserciones directas sobre modelos Pydantic además de smoke tests de integración — SQLite strippea tzinfo en el read, por lo que la ruta de integración no puede reproducir el bug de PostgreSQL. Las aserciones Pydantic sí lo capturan.
 - **Riesgo residual**: Ninguno en el flujo actual. Si se agrega un nuevo endpoint que devuelva datetime, debe declarar `response_model` (CitaRead/ClienteRead) o aplicar `naive()` manualmente — el comentario inline en `get_busy_slots` lo documenta.
+
+### 2026-06-28 — Fix: calendario admin — días en español y min/max ajustado a turnos
+
+- **Tipo**: Corrección de UX
+- **Descripción**: Dos issues en `frontend/src/components/CalendarView.tsx` (calendario admin con `react-big-calendar`):
+  1. `react-big-calendar` trae un objeto `messages` default en inglés (`allDay`, `previous`, `next`, `today`, `noEventsInRange`, `showMore`, etc.) que se filtraba en la UI. El custom Toolbar al pie pisa solo los nombres de las views (Día/Semana/Mes) pero no el resto. Ahora se pasa un `messages` con todas las traducciones al español.
+  2. El `min` y `max` del calendario se fijaban en `hora_apertura` y `hora_cierre` del horario efectivo, por lo que el grid mostraba todas las horas del rango de operación aunque no hubiera turnos. Ahora computa los bounds desde los appointments presentes en la vista actual (día o semana), con padding de 1h y clamp contra apertura/cierre. Si no hay turnos en la vista, cae al comportamiento anterior (apertura/cierre).
+- **Archivos afectados**: `frontend/src/components/CalendarView.tsx` (calendarMessages agregado, viewBounds useMemo para min/max ajustado a turnos, prop `messages` en `<Calendar>`)
+- **Requisitos relacionados**: ninguno formal (UI/UX). Cambio chico y autocontenido, sin implicancia en el spec.
+- **Motivo**: Issue reportado por la usuaria — días de la semana y textos auxiliares (allDay, noEventsInRange, +N more) salían en inglés, y la vista diaria/semanal mostraba horas vacías arriba/abajo del bloque real de turnos.
+- **Impacto esperado**: Calendario admin completamente en español y el rango visible se ajusta a los turnos existentes con un margen razonable.
+- **Decisiones técnicas**:
+  - Reutilizar `date-fns/locale es` ya importado para `startOfWeek`/`endOfWeek` con `weekStartsOn: 1` (lunes) — consistente con el resto del código que arranca la semana en lunes.
+  - Padding de 1h antes del primer turno y después del último: evita que los eventos queden pegados al borde superior/inferior del grid.
+  - Si no hay turnos en la vista, vuelve a apertura/cierre (no acota a un solo día si la semana entera está vacía).
+- **Riesgo residual**: Si hay un turno a las 23:00 y el cierre es a las 18:00, el `max` se va a 24:00 (porque el turno + 1h padding se extiende más allá del cierre). Esto es intencional — el admin necesita ver el turno aunque caiga fuera del horario comercial. Si el horario flexible se vuelve un problema, se puede ajustar el padding o agregar un cap explícito.

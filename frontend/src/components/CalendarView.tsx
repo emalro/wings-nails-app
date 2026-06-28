@@ -1,6 +1,6 @@
 import React from 'react'
 import { Calendar, dateFnsLocalizer, EventPropGetter, Views } from 'react-big-calendar'
-import { format, parse, startOfWeek, getDay } from 'date-fns'
+import { format, parse, startOfWeek, endOfWeek, getDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { useEffectiveHours } from '../hooks'
@@ -71,6 +71,26 @@ const calendarFormats = {
     format(start, 'HH:mm', { locale: es }) + ' - ' + format(end, 'HH:mm', { locale: es }),
 }
 
+// Spanish translations for react-big-calendar's built-in messages. The
+// custom Toolbar at the bottom of this file only overrides the view names
+// (Día/Semana/Mes); the remaining strings (allDay, noEventsInRange,
+// showMore, navigation, etc.) come from this `messages` prop.
+const calendarMessages = {
+  allDay: 'Todo el día',
+  previous: 'Atrás',
+  next: 'Adelante',
+  yesterday: 'Ayer',
+  tomorrow: 'Mañana',
+  today: 'Hoy',
+  agenda: 'Agenda',
+  week: 'Semana',
+  work_week: 'Semana laboral',
+  day: 'Día',
+  month: 'Mes',
+  noEventsInRange: 'No hay turnos en este rango.',
+  showMore: (total: number) => `+${total} más`,
+}
+
 // Status colors are sourced from the shared lib/statusColors module; the
 // values resolve from --status-* CSS variables defined in :root. There
 // are no raw hex literals here — see REQ-VIS-010.
@@ -83,13 +103,65 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
   const dateStr = format(date, 'yyyy-MM-dd')
   const { data: effectiveHours } = useEffectiveHours(dateStr)
 
-  const minTime = effectiveHours?.abierto && effectiveHours.hora_apertura
+  // Build the min/max the calendar should display. We start from the
+  // studio's effective opening/closing hours and narrow to the earliest/
+  // latest appointment in the current view (day or week) with a 1h
+  // padding, so empty hours at the edges are not displayed when no
+  // appointment falls in them. Falls back to apertura/cierre when there
+  // are no appointments in view.
+  const viewBounds = React.useMemo(() => {
+    if (!appointments.length) return null
+    const isWeek = view === Views.WEEK
+    const bounds = isWeek
+      ? {
+          start: startOfWeek(date, { weekStartsOn: 1, locale: es }),
+          end: endOfWeek(date, { weekStartsOn: 1, locale: es }),
+        }
+      : {
+          start: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0),
+          end: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0),
+        }
+    const inView = appointments.filter((cita) => {
+      const [dp, tp] = cita.fecha_hora_cita.split('T')
+      const [y, mo, d] = dp.split('-').map(Number)
+      const [h, mi] = (tp || '00:00').split(':').map(Number)
+      const start = new Date(y, mo - 1, d, h, mi)
+      return start >= bounds.start && start < bounds.end
+    })
+    if (!inView.length) return null
+    let minStart: Date | null = null
+    let maxEnd: Date | null = null
+    for (const cita of inView) {
+      const [dp, tp] = cita.fecha_hora_cita.split('T')
+      const [y, mo, d] = dp.split('-').map(Number)
+      const [h, mi] = (tp || '00:00').split(':').map(Number)
+      const start = new Date(y, mo - 1, d, h, mi)
+      const end = new Date(start.getTime() + cita.duracion_total_minutos * 60 * 1000)
+      if (!minStart || start < minStart) minStart = start
+      if (!maxEnd || end > maxEnd) maxEnd = end
+    }
+    return { min: minStart!, max: maxEnd! }
+  }, [appointments, date, view])
+
+  const aperturaTime = effectiveHours?.abierto && effectiveHours.hora_apertura
     ? new Date(`${dateStr}T${effectiveHours.hora_apertura}`)
     : undefined
-
-  const maxTime = effectiveHours?.abierto && effectiveHours.hora_cierre
+  const cierreTime = effectiveHours?.abierto && effectiveHours.hora_cierre
     ? new Date(`${dateStr}T${effectiveHours.hora_cierre}`)
     : undefined
+
+  const minTime = viewBounds?.min
+    ? new Date(Math.max(
+        aperturaTime ? aperturaTime.getTime() : 0,
+        viewBounds.min.getTime() - 60 * 60 * 1000
+      ))
+    : aperturaTime
+  const maxTime = viewBounds?.max
+    ? new Date(Math.min(
+        cierreTime ? cierreTime.getTime() : Number.MAX_SAFE_INTEGER,
+        viewBounds.max.getTime() + 60 * 60 * 1000
+      ))
+    : cierreTime
 
   const events: CalendarEvent[] = appointments.map((cita) => {
     // REQ-DCO-001/003: parse naive datetime string without UTC conversion
@@ -191,6 +263,7 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
         min={minTime}
         max={maxTime}
         formats={calendarFormats}
+        messages={calendarMessages}
         onView={(v) => setView(v)}
         onNavigate={(d) => setDate(d)}
         onSelectEvent={handleSelectEvent}
