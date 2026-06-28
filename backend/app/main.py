@@ -884,6 +884,15 @@ def delete_appointment(appointment_id: int, current_user: Usuario = Depends(get_
     if not cita:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
 
+    # If the cita was attended, decrement the client's attended-trips
+    # counter (which was incremented when the cita transitioned to
+    # EstadoCita.asistido). Guarded with > 0 to avoid going negative
+    # on edge cases.
+    if cita.estado_cita == EstadoCita.asistido:
+        cliente = session.get(Cliente, cita.id_cliente)
+        if cliente and cliente.cantidad_turnos_abonados > 0:
+            cliente.cantidad_turnos_abonados -= 1
+
     # Delete children first using raw SQL to avoid FK constraint issues on PostgreSQL
     session.execute(text("DELETE FROM citaservicio WHERE cita_id = :id"), {"id": appointment_id})
     session.delete(cita)

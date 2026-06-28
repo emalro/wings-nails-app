@@ -27,7 +27,7 @@ client = TestClient(app, base_url="https://testserver")
 # ── Auth setup for protected endpoints ─────────────────────────────────
 # Create a real user and login so the TestClient has auth cookies
 from app.auth import get_password_hash
-from app.models import Cita, Usuario
+from app.models import Cita, Cliente, Usuario
 with Session(engine) as session:
     hashed = get_password_hash("testpass123")
     user = Usuario(
@@ -1456,6 +1456,162 @@ def test_get_busy_slots_handles_aware_datetimes():
     cita_end_aware = aware_dt + timedelta(minutes=60)
     # No TypeError: both sides normalized via naive()
     assert not (naive(cita_end_aware) < start_of_day or naive(aware_dt) > end_of_day)
+
+
+def test_delete_asistido_cita_decrements_cliente_counter():
+    """Bug fix: deleting a cita in EstadoCita.asistido must decrement
+    the cliente's cantidad_turnos_abonados counter (which was incremented
+    when the cita transitioned to asistido). Without this, the counter
+    drifts from reality after a delete."""
+    global _test_counter
+    _test_counter = 400
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    # Create the cita
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Transition to Asistido — this should increment the counter to 1
+    patch_resp = client.patch(
+        f"/appointments/{cita_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert patch_resp.status_code == 200, f"PATCH failed: {patch_resp.text}"
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 1
+
+    # Delete the cita — counter must decrement back to 0
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200, f"DELETE failed: {del_resp.text}"
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+
+def test_delete_non_asistido_cita_does_not_change_counter():
+    """Negative case: deleting a cita that was never transitioned to
+    EstadoCita.asistido must NOT touch the counter (no increment
+    happened, so no decrement should happen either)."""
+    global _test_counter
+    _test_counter = 5001
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    # Create the cita (status defaults to Pendiente, not Asistido)
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Counter is 0 (never transitioned to Asistido)
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+    # Delete the cita — counter must stay at 0
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
+
+
+def test_delete_asistido_cita_does_not_make_counter_negative():
+    """Edge case: deleting a cita when the counter is already 0
+    (defensive — should not happen if the increment always pairs
+    with a delete, but safety net) must NOT produce a negative counter."""
+    global _test_counter
+    _test_counter = 402
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    appointment_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    appt_resp = client.post("/appointments", json=appointment_payload)
+    assert appt_resp.status_code == 200
+    cita_id = appt_resp.json()["id"]
+
+    # Manually reset the counter to 0 to simulate drift before the
+    # transition to Asistido (so when the transition happens the
+    # counter would be 1, but we then put it back to 0 to simulate
+    # the edge case of counter being 0 at delete time).
+    with Session(engine) as session:
+        cliente = session.get(Cliente, client_id)
+        cliente.cantidad_turnos_abonados = 0
+        session.add(cliente)
+        session.commit()
+
+    # Transition to Asistido — this would normally increment to 1
+    patch_resp = client.patch(
+        f"/appointments/{cita_id}",
+        json={"estado_cita": "Asistido", "monto_recibido_en_caja": 2500.0},
+    )
+    assert patch_resp.status_code == 200
+
+    # Manually reset the counter back to 0 to simulate the drift
+    # scenario (counter is 0 at delete time, but the cita is Asistido)
+    with Session(engine) as session:
+        cliente = session.get(Cliente, client_id)
+        cliente.cantidad_turnos_abonados = 0
+        session.add(cliente)
+        session.commit()
+
+    # Delete the cita — counter must stay at 0 (NOT go to -1)
+    del_resp = client.delete(f"/appointments/{cita_id}")
+    assert del_resp.status_code == 200
+
+    with Session(engine) as session:
+        assert session.get(Cliente, client_id).cantidad_turnos_abonados == 0
 
 
 # ── REQ-DCO-001: Naive datetime serialization ─────────────────────────────
