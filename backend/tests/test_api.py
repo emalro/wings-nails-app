@@ -1737,6 +1737,20 @@ def test_appointment_datetime_aware_input_serializes_naive():
     assert cita_update.fecha_hora_cita.tzinfo is None, \
         f"PROD-D: CitaUpdate.fecha_hora_cita still has tzinfo: {cita_update.fecha_hora_cita.tzinfo}"
 
+    # REQ-DVA-004 (S-1): explicit -03:00 offset spelling normalizes to naive
+    offset_aware = datetime(2026, 6, 29, 9, 0, tzinfo=timezone(timedelta(hours=-3)))
+    cita_create_neg3 = CitaCreate(
+        id_cliente=1,
+        fecha_hora_cita=offset_aware,
+        precio_historico_cobrado=2000.0,
+        sena_historica_pagada=0.0,
+        servicios=[],
+    )
+    assert cita_create_neg3.fecha_hora_cita == datetime(2026, 6, 29, 9, 0), \
+        f"REQ-DVA-004: -03:00 offset did not normalize: {cita_create_neg3.fecha_hora_cita!r}"
+    assert cita_create_neg3.fecha_hora_cita.tzinfo is None, \
+        f"REQ-DVA-004: -03:00 offset kept tzinfo: {cita_create_neg3.fecha_hora_cita.tzinfo}"
+
     # PROD-E (negative): direct CitaRead JSON contains no Z or +00:00
     assert "Z" not in cita_json, "PROD-E: CitaRead JSON contains Z"
     assert "+00:00" not in cita_json, "PROD-E: CitaRead JSON contains +00:00"
@@ -1793,6 +1807,57 @@ def test_appointment_datetime_aware_input_serializes_naive():
         f"Z-suffix string. fecha_hora_cita={reparsed.fecha_hora_cita!r} "
         f"tzinfo={reparsed.fecha_hora_cita.tzinfo!r}. "
         f"The validator must run AFTER Pydantic parses the string (mode='after')."
+    )
+
+
+def test_cita_patch_with_z_suffix_preserves_wall_clock():
+    """REQ-DVA-005 (S-2): Full HTTP PATCH round-trip — a 'Z'-suffixed datetime
+    must persist as naive 09:00 and the next GET must return naive 09:00
+    (no hour shift). The validator normalizes tzinfo on input; the serializer
+    emits naive on output. This end-to-end test catches any regression where
+    one half of the round-trip drifts (e.g., validator added but serializer
+    not updated, or vice versa).
+    """
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    # Create a cita with a naive wall-clock time
+    create_payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    create_resp = client.post("/appointments", json=create_payload)
+    assert create_resp.status_code == 200, f"Setup POST failed: {create_resp.text}"
+    cita_id = create_resp.json()["id"]
+
+    # PATCH with an explicit "Z"-suffixed ISO string one hour later
+    target_wall = appt_dt + timedelta(hours=1)
+    target_z = target_wall.isoformat() + "Z"
+    patch_resp = client.patch(
+        f"/appointments/{cita_id}",
+        json={"fecha_hora_cita": target_z},
+    )
+    assert patch_resp.status_code == 200, f"PATCH failed: {patch_resp.text}"
+
+    # GET the cita back and assert the wall-clock hour is preserved (no shift)
+    list_resp = client.get("/appointments")
+    assert list_resp.status_code == 200
+    target = next(a for a in list_resp.json() if a["id"] == cita_id)
+    assert target["fecha_hora_cita"] == target_wall.isoformat(), (
+        f"REQ-DVA-005: PATCH with Z suffix did not preserve wall-clock. "
+        f"Expected {target_wall.isoformat()!r}, got {target['fecha_hora_cita']!r}"
     )
 
 
@@ -2307,3 +2372,62 @@ def test_cita_create_with_sena_cero_ok():
     }
     resp = client.post("/appointments", json=payload)
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+
+# ── REQ-DVA-003: anti-typo guard for PydanticCustomError type strings ─────
+# These tests lock the exact byte strings the frontend matches on
+# (REQ-DVA-002 / REQ-DVA-001). If a future "typo fix" silently normalizes
+# the ñ or renames the type, this test fails and the regression is caught
+# at CI time, not in production.
+
+def test_post_services_with_sena_mayor_returns_422_with_literal_type_senia():
+    """REQ-DVA-003: POST /services must emit detail[0].type == 'seña_excede_precio' (with ñ)."""
+    payload = {
+        "nombre_servicio": "Anti-Typo Seña",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 3000.0,  # seña > precio
+        "descripcion": "Anti-typo guard",
+        "activo": True,
+    }
+    resp = client.post("/services", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+    detail = resp.json()["detail"]
+    assert isinstance(detail, list) and len(detail) > 0, \
+        f"Expected detail list, got: {detail!r}"
+    assert detail[0]["type"] == "seña_excede_precio", (
+        f"REQ-DVA-003 (services): expected literal 'seña_excede_precio' (with ñ), "
+        f"got {detail[0]['type']!r}"
+    )
+
+
+def test_post_appointments_with_sena_mayor_returns_422_with_literal_type_sena():
+    """REQ-DVA-003: POST /appointments must emit detail[0].type == 'sena_excede_precio' (no ñ)."""
+    client_id, service_id, _ = _new_test_client_service()
+
+    days_offset, minutes_offset = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2000.0,
+        "sena_historica_pagada": 2500.0,  # sena > precio
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2000.0,
+                "subtotal": 2000.0,
+            }
+        ],
+    }
+    resp = client.post("/appointments", json=payload)
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+    detail = resp.json()["detail"]
+    assert isinstance(detail, list) and len(detail) > 0, \
+        f"Expected detail list, got: {detail!r}"
+    assert detail[0]["type"] == "sena_excede_precio", (
+        f"REQ-DVA-003 (appointments): expected literal 'sena_excede_precio' (no ñ), "
+        f"got {detail[0]['type']!r}"
+    )
