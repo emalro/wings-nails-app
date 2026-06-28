@@ -921,10 +921,16 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
         # aware (PostgreSQL/Supabase) and start_of_day/end_of_day are naive.
         if naive(cita_end) < start_of_day or naive(cita.fecha_hora_cita) > end_of_day:
             continue
+        # naive() wrap REQUIRED: this endpoint does not declare response_model,
+        # so the CitaRead @field_serializer does NOT run here. Any new endpoint
+        # returning a datetime MUST declare response_model (CitaRead/ClienteRead)
+        # or apply naive() manually. — REQ-DCO-004 PROD-B
+        def naive(dt: datetime) -> datetime:
+            return dt.replace(tzinfo=None) if dt.tzinfo else dt
         busy_slots.append({
             "cita_id": cita.id,
-            "start": cita.fecha_hora_cita.isoformat(),
-            "end": cita_end.isoformat(),
+            "start": naive(cita.fecha_hora_cita).isoformat(),
+            "end": naive(cita_end).isoformat(),
             "estado": cita.estado_cita,
         })
 
