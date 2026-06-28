@@ -163,7 +163,6 @@ export default function Home() {
               </a>
             )}
           </div>
-          <p className="conectemos-address">{address}</p>
         </div>
       </section>
 
