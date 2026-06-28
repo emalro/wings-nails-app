@@ -422,11 +422,7 @@ def validate_appointment_hours(
 
 
 @app.post("/clients", response_model=ClienteRead)
-@limiter.limit("10/minute")
-def create_client(request: Request, client: ClienteCreate, session: Session = Depends(get_session)):
-    # B-8: public endpoint — no auth required. The /reservar flow lets a new
-    # client self-register (lookup-or-create by DNI) without a JWT. Per-IP
-    # rate limiting above protects against abuse.
+def create_client(client: ClienteCreate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     normalized_phone = normalize_phone(client.telefono)
 
     # 1. Search by DNI (primary identifier)
@@ -796,11 +792,7 @@ def build_cita_response(cita: Cita, session: Session) -> dict:
 
 
 @app.post("/appointments", response_model=CitaRead)
-@limiter.limit("10/minute")
-def create_appointment(request: Request, appointment: CitaCreate, session: Session = Depends(get_session)):
-    # B-8: public endpoint — no auth required. The /reservar flow lets a
-    # client create their own appointment without a JWT. Per-IP rate
-    # limiting above protects against abuse.
+def create_appointment(appointment: CitaCreate, current_user: Usuario = Depends(get_current_user), session: Session = Depends(get_session)):
     client = session.get(Cliente, appointment.id_cliente)
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
