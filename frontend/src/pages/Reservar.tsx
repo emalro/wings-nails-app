@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useConfig } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
 import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
+import { getApiError } from '../lib/apiErrors'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
@@ -174,7 +175,7 @@ export default function Reservar() {
         setMessage('El horario elegido ya fue reservado por otra persona. Elegí otro horario.')
       } else if (err?.response?.status === 422) {
         setMessageType('error')
-        setMessage(err?.response?.data?.detail || 'Datos inválidos. Revisá los campos.')
+        setMessage(getApiError(err).message)
       } else {
         setMessageType('error')
         setMessage('Ocurrió un error. Intentá de nuevo.')

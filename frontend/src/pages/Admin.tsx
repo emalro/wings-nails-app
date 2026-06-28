@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppointment, useUpdateAppointmentStatus, useCreateService, useUpdateService, useDeleteService, useDeleteAppointment, useWeeklySchedule, useUpdateWeeklySchedule, useExceptions, useCreateException, useDeleteException } from '../hooks'
 import { useAuth } from '../hooks/useAuth'
 import { formatDate, formatTime } from '../lib/datetime'
+import { getApiError } from '../lib/apiErrors'
 import CalendarView from '../components/CalendarView'
 import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
@@ -269,8 +270,7 @@ export default function Admin() {
           setSelectedCita(data)
         },
         onError: (err: any) => {
-          const detail = err?.response?.data?.detail || 'Error al guardar los cambios.'
-          setError(detail)
+          setError(getApiError(err).message)
         },
       },
     )
@@ -307,7 +307,7 @@ export default function Admin() {
         setServiceMessage('Servicio creado.')
         setServicePayload({ nombre_servicio: '', duracion_minutos: 45, precio_actual: 0, monto_sena_actual: 0, descripcion: '' })
       },
-      onError: () => setServiceMessage('No se pudo crear el servicio.'),
+      onError: (err: any) => setServiceMessage(getApiError(err).message),
     })
   }
 
@@ -330,7 +330,7 @@ export default function Admin() {
       { serviceId: editingServiceId, payload: editingServicePayload },
       {
         onSuccess: () => { setServiceMessage('Servicio actualizado.'); setEditingServiceId(null) },
-        onError: () => setServiceMessage('No se pudo actualizar el servicio.'),
+        onError: (err: any) => setServiceMessage(getApiError(err).message),
       },
     )
   }

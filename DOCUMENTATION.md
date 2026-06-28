@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 27/06/2026
+> Última actualización: 28/06/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -247,6 +247,22 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Motivo**: La identidad wine + gold leía como "vino y dorado formal" en un negocio de manicuría; la dirección pastel girly (rose + lavender) refleja mejor la marca. La paleta anterior también adolecía de un status color warm gold que entraba en conflicto con la nueva identidad.
 - **Impacto esperado**: Refresh visual completo sin cambios funcionales. Mejor contraste WCAG 2.2 AA en pares críticos. Skip link, focus rings, y motion gate mejoran el acceso a teclado. La excepción `--status-pending` warm gold se mantiene por su significado semántico, no por decoración.
 - **size:exception**: El forecast de diff fue 600–750 líneas vs el presupuesto de revisión de 400. El usuario aprobó formalmente la excepción antes del apply phase; se documentó en `sdd/visual-style-refresh/size-exception` (Engram topic). Se solicitó excepción formal porque la refresh toca toda la app de forma acoplada; partir en chained PRs introduciría estados intermedios donde medio shell usa tokens nuevos y medio usa viejos.
+
+### 2026-06-28 — Custom alert frontend para seña > precio (REQ-DVA-001..005)
+
+- **Tipo**: Nueva funcionalidad / Mejora (SDD: deposit-front-alert)
+- **Descripción**: Cierra el pendiente `deposit-validation/front-alert/todo` heredado de PR #47 (`8e5d568`). El backend ya emite `PydanticCustomError` con `type === "seña_excede_precio"` (con ñ, desde `Servicio*`) o `type === "sena_excede_precio"` (sin ñ, desde `Cita*`); el frontend ahora muestra un mensaje en español específico para esa violación en lugar de comerse la lista `[object Object]` detrás de un `||` fallback. Cierra también S-1 (offset `-03:00` explícito) y S-2 (round-trip PATCH con Z) del verify-report de `tz-argentina-display` (engram #228 §6).
+- **Archivos**:
+  - `frontend/src/lib/apiErrors.ts` (nuevo) — helper `getApiError(err)` + tabla `API_ERROR_MESSAGES` con ambas spellings; type `ApiError` y `ApiErrorType`.
+  - `frontend/src/lib/apiErrors.test.ts` (nuevo) — 6 casos Vitest: cita context (no ñ), service context (con ñ), unknown 422, 422 con `detail` string, error no-Axios, error plano.
+  - `frontend/src/pages/Reservar.tsx` (modificado) — branch 422 de `handleConfirm` consume `getApiError(err).message`.
+  - `frontend/src/components/ManualAppointmentModal.tsx` (modificado) — catch de `createAppointment` consume `getApiError(err).message`.
+  - `frontend/src/pages/Admin.tsx` (modificado) — `handleSaveAppointment`, `handleCreateService`, `handleUpdateService` consumen `getApiError(err).message`.
+  - `backend/tests/test_api.py` (modificado) — 1 sub-assertion S-1 en `test_appointment_datetime_aware_input_serializes_naive`, 1 test nuevo S-2 `test_cita_patch_with_z_suffix_preserves_wall_clock`, 2 tests nuevos anti-typo `test_post_services_with_sena_mayor_returns_422_with_literal_type_senia` y `test_post_appointments_with_sena_mayor_returns_422_with_literal_type_sena`.
+- **Requisitos**: REQ-DVA-001 (backend emitters ya en main), REQ-DVA-002 (frontend custom alert en 4 superficies), REQ-DVA-003 (anti-typo guard), REQ-DVA-004 (S-1 offset `-03:00`), REQ-DVA-005 (S-2 round-trip PATCH).
+- **SDD**: `openspec/changes/deposit-front-alert/`
+- **Motivo**: UX de error. La violación `seña > precio` es una regla de negocio que la manicurista necesita entender de un vistazo; el fallback genérico la ocultaba detrás de `[object Object]`. El anti-typo guard blinda el contrato frontend-backend contra "typo fix" futuros que rompan el match en silencio. S-1 y S-2 cierran gaps del verify-report de la fix previa de timezone.
+- **Impacto esperado**: Mensajes de error específicos (servicio vs turno) en lugar de `[object Object]` en 4 superficies. 114 tests backend pasando (era 111). 6 tests Vitest nuevos. `npx tsc --noEmit` limpio. Sin migraciones de DB, sin schema drift. Revert restaura el `||` fallback previo sin side effects.
 
 ---
 

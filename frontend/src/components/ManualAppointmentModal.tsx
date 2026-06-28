@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useServices, useCreateClient, useClientSearch, useCreateManualAppointment } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
+import { getApiError } from '../lib/apiErrors'
 import FieldError from './FieldError'
 import type { ClienteRead } from '../api'
 
@@ -245,8 +246,7 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
       onAppointmentCreated()
       onClose()
     } catch (err: any) {
-      const detail = err?.response?.data?.detail || 'Error al crear el turno.'
-      setError(detail)
+      setError(getApiError(err).message)
     }
   }
 
