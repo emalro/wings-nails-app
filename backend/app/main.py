@@ -914,6 +914,13 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
     citas = session.exec(select(Cita).where(Cita.estado_cita.in_(active_states))).all()
     busy_slots = []
 
+    # naive() wrap REQUIRED on BOTH the comparison (below) AND the isoformat
+    # serialization below. The CitaRead @field_serializer does NOT run here
+    # because this endpoint has no response_model. — REQ-DCO-004 PROD-B +
+    # comparison
+    def naive(dt: datetime) -> datetime:
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
     for cita in citas:
         duration = calculate_duration_for_cita(cita, session)
         cita_end = cita.fecha_hora_cita + timedelta(minutes=duration)
@@ -921,12 +928,6 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
         # aware (PostgreSQL/Supabase) and start_of_day/end_of_day are naive.
         if naive(cita_end) < start_of_day or naive(cita.fecha_hora_cita) > end_of_day:
             continue
-        # naive() wrap REQUIRED: this endpoint does not declare response_model,
-        # so the CitaRead @field_serializer does NOT run here. Any new endpoint
-        # returning a datetime MUST declare response_model (CitaRead/ClienteRead)
-        # or apply naive() manually. — REQ-DCO-004 PROD-B
-        def naive(dt: datetime) -> datetime:
-            return dt.replace(tzinfo=None) if dt.tzinfo else dt
         busy_slots.append({
             "cita_id": cita.id,
             "start": naive(cita.fecha_hora_cita).isoformat(),
