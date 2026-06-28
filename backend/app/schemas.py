@@ -168,6 +168,11 @@ class CitaCreate(BaseModel):
             )
         return self
 
+    @field_validator("fecha_hora_cita", mode="before")
+    @classmethod
+    def _accept_naive_or_aware(cls, v):
+        return v.replace(tzinfo=None) if hasattr(v, "tzinfo") and v.tzinfo else v
+
 
 class CitaUpdate(BaseModel):
     estado_cita: Optional[EstadoCita] = None
@@ -189,6 +194,11 @@ class CitaUpdate(BaseModel):
                     {"sena": self.sena_historica_pagada, "precio": self.precio_historico_cobrado},
                 )
         return self
+
+    @field_validator("fecha_hora_cita", mode="before")
+    @classmethod
+    def _accept_naive_or_aware(cls, v):
+        return v.replace(tzinfo=None) if hasattr(v, "tzinfo") and v.tzinfo else v
 
 
 class ConfiguracionUpdate(BaseModel):
