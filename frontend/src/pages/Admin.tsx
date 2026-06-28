@@ -59,6 +59,54 @@ export default function Admin() {
     }
   }, [authLoading, isAuthenticated, navigate])
 
+  // Collapsibles state — persisted to localStorage so the admin
+  // finds each section as they left it on the next visit.
+  const COLLAPSIBLES_STORAGE_KEY = 'wings-nails-app/admin/collapsibles'
+  const COLLAPSIBLE_IDS = ['excepciones', 'clientes', 'horarios', 'servicios', 'configuracion'] as const
+  type CollapsibleId = typeof COLLAPSIBLE_IDS[number]
+
+  function loadCollapsiblesState(): Record<CollapsibleId, boolean> {
+    const defaults = Object.fromEntries(COLLAPSIBLE_IDS.map((id) => [id, false])) as Record<CollapsibleId, boolean>
+    try {
+      const stored = localStorage.getItem(COLLAPSIBLES_STORAGE_KEY)
+      if (!stored) return defaults
+      const parsed = JSON.parse(stored)
+      if (typeof parsed !== 'object' || parsed === null) return defaults
+      for (const id of COLLAPSIBLE_IDS) {
+        if (typeof parsed[id] === 'boolean') defaults[id] = parsed[id]
+      }
+    } catch {
+      // ignore parse errors / disabled storage
+    }
+    return defaults
+  }
+
+  const [collapsiblesState, setCollapsiblesState] = useState<Record<CollapsibleId, boolean>>(loadCollapsiblesState)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSIBLES_STORAGE_KEY, JSON.stringify(collapsiblesState))
+    } catch {
+      // ignore
+    }
+  }, [collapsiblesState])
+
+  function setCollapsible(id: CollapsibleId, open: boolean) {
+    setCollapsiblesState((prev) => ({ ...prev, [id]: open }))
+  }
+
+  function expandAllCollapsibles() {
+    setCollapsiblesState(
+      Object.fromEntries(COLLAPSIBLE_IDS.map((id) => [id, true])) as Record<CollapsibleId, boolean>
+    )
+  }
+
+  function collapseAllCollapsibles() {
+    setCollapsiblesState(
+      Object.fromEntries(COLLAPSIBLE_IDS.map((id) => [id, false])) as Record<CollapsibleId, boolean>
+    )
+  }
+
   if (authLoading || !isAuthenticated) {
     return null
   }
@@ -320,7 +368,7 @@ export default function Admin() {
       {error && <div className="status-notice error">{error}</div>}
 
       {/* ── AGENDA ── */}
-      <section className="mt-8">
+      <section className="agenda-section mt-8">
         <div className="section-header text-left">
           <span className="overline">Turnos</span>
           <h2 className="font-[var(--font-display)] text-1.4rem mt-1">Agenda visual</h2>
@@ -391,7 +439,7 @@ export default function Admin() {
                   label: 'Acciones',
                   render: (_v: any, row: any) => (
                     <div className="data-table-actions">
-                      <button className="primary" type="button" onClick={() => handleMarkAttended(row)}>Asisti\u00F3</button>
+                      <button className="primary" type="button" onClick={() => handleMarkAttended(row)}>Confirmar Asistencia</button>
                       <button className="danger" type="button" onClick={() => handleDeleteAppointment(row.id)}>Eliminar</button>
                     </div>
                   ),
@@ -414,28 +462,32 @@ export default function Admin() {
         />
       </section>
 
-      {/* ── HORARIOS ── */}
-      <details open className="admin-card collapsible-card mt-6">
-        <summary>
-          Horarios de Atención
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          <ScheduleSection
-            scheduleForm={scheduleForm}
-            setScheduleForm={setScheduleForm}
-            weeklyLoading={weeklyLoading}
-            updateWeeklyMutation={updateWeeklyMutation}
-            scheduleMessage={scheduleMessage}
-            handleSaveWeekly={handleSaveWeekly}
-          />
-        </div>
-      </details>
+      {/* ── Collapsibles controls ── */}
+      <div className="flex gap-2 justify-end mt-6 mb-2">
+        <button
+          type="button"
+          onClick={expandAllCollapsibles}
+          className="text-sm px-3 py-1.5 rounded-md border border-[var(--outline-variant)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-container)] hover:text-[var(--primary)] transition-colors"
+        >
+          Expandir todo
+        </button>
+        <button
+          type="button"
+          onClick={collapseAllCollapsibles}
+          className="text-sm px-3 py-1.5 rounded-md border border-[var(--outline-variant)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-container)] hover:text-[var(--primary)] transition-colors"
+        >
+          Colapsar todo
+        </button>
+      </div>
 
-      {/* ── EXCEPCIONES ── */}
-      <details className="admin-card collapsible-card mt-4">
+      {/* ── EXCEPCIONES DE CIERRE ── */}
+      <details
+        open={collapsiblesState.excepciones}
+        onToggle={(e) => setCollapsible('excepciones', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-6"
+      >
         <summary>
-          Excepciones
+          Excepciones de cierre
           <span className="chevron">›</span>
         </summary>
         <div className="collapsible-body">
@@ -458,28 +510,14 @@ export default function Admin() {
         </div>
       </details>
 
-      {/* ── CONFIGURACIÓN DEL NEGOCIO ── */}
-      <details className="admin-card collapsible-card mt-6">
+      {/* ── CLIENTES ── */}
+      <details
+        open={collapsiblesState.clientes}
+        onToggle={(e) => setCollapsible('clientes', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-4"
+      >
         <summary>
-          Configuración del negocio
-          <span className="chevron">›</span>
-        </summary>
-        <div className="collapsible-body">
-          <BusinessConfigSection
-            configForm={configForm}
-            setConfigForm={setConfigForm}
-            configLoading={configLoading}
-            updateConfigMutation={updateConfigMutation}
-            configMessage={configMessage}
-            handleUpdateConfig={handleUpdateConfig}
-          />
-        </div>
-      </details>
-
-      {/* ── CLIENTAS ── */}
-      <details className="admin-card collapsible-card mt-6">
-        <summary>
-          Clientas
+          Clientes
           <span className="chevron">›</span>
         </summary>
         <div className="collapsible-body">
@@ -487,8 +525,34 @@ export default function Admin() {
         </div>
       </details>
 
+      {/* ── HORARIOS ── */}
+      <details
+        open={collapsiblesState.horarios}
+        onToggle={(e) => setCollapsible('horarios', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-4"
+      >
+        <summary>
+          Horarios de Atención
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <ScheduleSection
+            scheduleForm={scheduleForm}
+            setScheduleForm={setScheduleForm}
+            weeklyLoading={weeklyLoading}
+            updateWeeklyMutation={updateWeeklyMutation}
+            scheduleMessage={scheduleMessage}
+            handleSaveWeekly={handleSaveWeekly}
+          />
+        </div>
+      </details>
+
       {/* ── SERVICIOS ── */}
-      <details className="admin-card collapsible-card mt-6">
+      <details
+        open={collapsiblesState.servicios}
+        onToggle={(e) => setCollapsible('servicios', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-4"
+      >
         <summary>
           Servicios
           <span className="chevron">›</span>
@@ -513,6 +577,28 @@ export default function Admin() {
             handleUpdateService={handleUpdateService}
             handleToggleServiceActive={handleToggleServiceActive}
             handleDeleteService={handleDeleteService}
+          />
+        </div>
+      </details>
+
+      {/* ── CONFIGURACIÓN DEL NEGOCIO ── */}
+      <details
+        open={collapsiblesState.configuracion}
+        onToggle={(e) => setCollapsible('configuracion', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-4"
+      >
+        <summary>
+          Configuración del negocio
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <BusinessConfigSection
+            configForm={configForm}
+            setConfigForm={setConfigForm}
+            configLoading={configLoading}
+            updateConfigMutation={updateConfigMutation}
+            configMessage={configMessage}
+            handleUpdateConfig={handleUpdateConfig}
           />
         </div>
       </details>

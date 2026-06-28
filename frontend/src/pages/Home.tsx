@@ -1,6 +1,8 @@
 import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useServices, useConfig } from '../hooks'
+import { isContactUrl } from '../lib/contactLinks'
+import { SkeletonLoader } from '../components/SkeletonLoader'
 
 type Service = {
   id: number
@@ -13,11 +15,11 @@ type Service = {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { data: services = [], isLoading } = useServices()
-  const { data: config } = useConfig()
+  const { data: services = [], isLoading, isError: servicesError, refetch: refetchServices } = useServices()
+  const { data: config, isLoading: configLoading } = useConfig()
 
-  const fbUrl = config?.facebook_url || 'https://www.facebook.com/wingsnails.rosario'
-  const igUrl = config?.instagram_url || 'https://www.instagram.com/wings__nails_/'
+  const fbUrl = config?.facebook_url || ''
+  const igUrl = config?.instagram_url || ''
   const waUrl = config?.whatsapp_number
     ? `https://wa.me/${config.whatsapp_number.replace(/[^0-9]/g, '')}`
     : ''
@@ -47,7 +49,7 @@ export default function Home() {
           >
             Reservar Turno
           </button>
-          {waUrl.length > 0 && (
+          {isContactUrl(waUrl) && (
             <a
               href={waUrl}
               target="_blank"
@@ -70,7 +72,22 @@ export default function Home() {
           </div>
 
           {isLoading ? (
-            <div className="empty-state">Cargando servicios...</div>
+            <div className="service-grid" aria-busy="true" aria-label="Cargando servicios">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonLoader key={i} variant="card" />
+              ))}
+            </div>
+          ) : servicesError ? (
+            <div className="empty-state" role="alert">
+              <p>No pudimos cargar los servicios. El servidor puede estar despertando.</p>
+              <button
+                type="button"
+                onClick={() => refetchServices()}
+                className="button-primary mt-3 inline-flex"
+              >
+                Reintentar
+              </button>
+            </div>
           ) : services.length === 0 ? (
             <div className="empty-state">No hay servicios disponibles por el momento.</div>
           ) : (
@@ -105,8 +122,14 @@ export default function Home() {
             <h2 id="conectemos-title">Hablamos por donde te quede más cómodo</h2>
             <p>Elegí tu canal favorito para reservar, hacer una consulta o ver los últimos diseños.</p>
           </div>
-          <div className="conectemos-grid">
-            {waUrl.length > 0 && (
+          <div className="conectemos-grid" aria-busy={configLoading || undefined}>
+            {configLoading ? (
+              <>
+                <div className="h-12 w-32 bg-surface-container rounded-full animate-pulse" aria-hidden="true" />
+                <div className="h-12 w-32 bg-surface-container rounded-full animate-pulse" aria-hidden="true" />
+                <div className="h-12 w-32 bg-surface-container rounded-full animate-pulse" aria-hidden="true" />
+              </>
+            ) : isContactUrl(waUrl) && (
               <a
                 href={waUrl}
                 target="_blank"
@@ -117,7 +140,7 @@ export default function Home() {
                 WhatsApp
               </a>
             )}
-            {igUrl.length > 0 && (
+            {isContactUrl(igUrl) && (
               <a
                 href={igUrl}
                 target="_blank"
@@ -128,7 +151,7 @@ export default function Home() {
                 Instagram
               </a>
             )}
-            {fbUrl.length > 0 && (
+            {isContactUrl(fbUrl) && (
               <a
                 href={fbUrl}
                 target="_blank"
@@ -168,7 +191,7 @@ export default function Home() {
               referrerPolicy="no-referrer-when-downgrade"
               title="Ubicación del estudio"
             />
-            <p className="hint">{config?.address || 'Rosario, Santa Fe'}</p>
+            <p className="hint">{configLoading ? <SkeletonLoader variant="text" lines={1} className="max-w-xs mx-auto" /> : (config?.address || 'Rosario, Santa Fe')}</p>
           </div>
         </div>
       </section>

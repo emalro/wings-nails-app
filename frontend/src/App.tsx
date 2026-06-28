@@ -6,6 +6,7 @@ import { SkeletonLoader } from './components/SkeletonLoader'
 import SkipLink from './components/SkipLink'
 import ScrollToTop from './components/ScrollToTop'
 import { FaWhatsapp, FaInstagram, FaFacebook, FaAddressBook, FaBars, FaTimes } from "react-icons/fa";
+import { isContactUrl } from "./lib/contactLinks";
 import { GiAngelWings } from "react-icons/gi";
 
 
@@ -20,19 +21,30 @@ export default function App() {
   const { data: config } = useConfig()
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   const businessName = config?.business_name || 'Wings Nails'
-  const fbUrl = config?.facebook_url || 'https://www.facebook.com/wingsnails.rosario'
-  const igUrl = config?.instagram_url || 'https://www.instagram.com/wings__nails_/'
+  const fbUrl = config?.facebook_url || ''
+  const igUrl = config?.instagram_url || ''
   const waUrl = config?.whatsapp_number ? whatsappUrl(config.whatsapp_number) : ''
-  const address = config?.address || 'México 1223, S2000 Rosario, Santa Fe'
-  const adminLabel = isAuthenticated ? 'Ir al panel de administración' : 'Ingresar al panel'
+  const adminLabel = 'Administración'
 
   useEffect(() => {
     document.title = businessName
   }, [businessName])
+
+  // Track viewport size: hide the WhatsApp FAB on desktop where the
+  // navbar already exposes the same icon in the social row.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia('(min-width: 768px)')
+    const handleChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    setIsDesktop(mq.matches)
+    mq.addEventListener('change', handleChange)
+    return () => mq.removeEventListener('change', handleChange)
+  }, [])
 
   const closeMobile = useCallback(() => setMobileOpen(false), [])
 
@@ -107,13 +119,13 @@ export default function App() {
           <div className="hidden md:flex items-center gap-1.5">
             <Link to="/reservar" className="navbar-cta">Reservar Turno</Link>
             <div className="navbar-social">
-              {waUrl.length > 0 && (
+              {isContactUrl(waUrl) && (
                 <a href={waUrl} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="WhatsApp"><FaWhatsapp size={22} /></a>
               )}
-              {igUrl.length > 0 && (
+              {isContactUrl(igUrl) && (
                 <a href={igUrl} target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram"><FaInstagram size={22} /></a>
               )}
-              {fbUrl.length > 0 && (
+              {isContactUrl(fbUrl) && (
                 <a href={fbUrl} target="_blank" rel="noopener noreferrer" title="Facebook" aria-label="Facebook"><FaFacebook size={22} /></a>
               )}
               <Link
@@ -183,20 +195,20 @@ export default function App() {
           </Link>
           <Link
             to={isAuthenticated ? "/admin" : "/login"}
-            className="block py-3 px-4 rounded-lg font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--primary-container)] text-center"
+            className="block py-3 px-4 rounded-lg font-semibold text-[var(--on-surface-variant)] hover:bg-[var(--primary-container)] hover:text-[var(--on-primary-container)] transition-colors text-center"
             onClick={closeMobile}
             aria-label={adminLabel}
           >
-            <FaAddressBook className="inline mr-2" /> Admin
+            <FaAddressBook className="inline mr-2" /> Administración
           </Link>
           <div className="flex justify-center gap-4 mt-4 pt-4 border-t border-[var(--outline-variant)]">
-            {waUrl.length > 0 && (
+            {isContactUrl(waUrl) && (
               <a href={waUrl} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="WhatsApp" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] inline-flex items-center justify-center min-w-[24px] min-h-[24px]"><FaWhatsapp size={22} /></a>
             )}
-            {igUrl.length > 0 && (
+            {isContactUrl(igUrl) && (
               <a href={igUrl} target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] inline-flex items-center justify-center min-w-[24px] min-h-[24px]"><FaInstagram size={22} /></a>
             )}
-            {fbUrl.length > 0 && (
+            {isContactUrl(fbUrl) && (
               <a href={fbUrl} target="_blank" rel="noopener noreferrer" title="Facebook" aria-label="Facebook" className="text-[var(--on-surface-variant)] hover:text-[var(--primary)] inline-flex items-center justify-center min-w-[24px] min-h-[24px]"><FaFacebook size={22} /></a>
             )}
           </div>
@@ -210,24 +222,27 @@ export default function App() {
       <footer className="bg-[var(--on-background)] text-white/70 py-5 px-5 mt-auto">
         <div className="max-w-[1120px] mx-auto flex justify-between items-center gap-4 flex-wrap text-sm">
           <div>
-            &copy; {new Date().getFullYear()} <span className="text-[var(--secondary-container)]">{businessName}</span> &mdash; {address}.
+            &copy; {new Date().getFullYear()} <span className="text-[var(--secondary-container)]">{businessName}</span>. Todos los derechos reservados.
           </div>
           <div className="flex gap-3">
-            {waUrl.length > 0 && (
+            {isContactUrl(waUrl) && (
               <a href={waUrl} target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="WhatsApp" className="text-white/70 hover:text-[var(--secondary-container)] transition-colors"><FaWhatsapp size={22} /></a>
             )}
-            {igUrl.length > 0 && (
+            {isContactUrl(igUrl) && (
               <a href={igUrl} target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Instagram" className="text-white/70 hover:text-[var(--secondary-container)] transition-colors"><FaInstagram size={22} /></a>
             )}
-            {fbUrl.length > 0 && (
+            {isContactUrl(fbUrl) && (
               <a href={fbUrl} target="_blank" rel="noopener noreferrer" title="Facebook" aria-label="Facebook" className="text-white/70 hover:text-[var(--secondary-container)] transition-colors"><FaFacebook size={22} /></a>
             )}
           </div>
         </div>
       </footer>
 
-      {/* Floating WhatsApp FAB — REQ-VIS-006: visible on every page. */}
-      {waUrl.length > 0 && (
+      {/* Floating WhatsApp FAB — visible on mobile only, hides when the
+          navbar already exposes the same icon (desktop) or the mobile
+          drawer is open. Sits above the ScrollToTop button in the
+          bottom-right stack. */}
+      {isContactUrl(waUrl) && !isDesktop && !mobileOpen && (
         <a
           href={waUrl}
           target="_blank"

@@ -29,7 +29,6 @@ export default function BusinessConfigSection({
 }: BusinessConfigSectionProps) {
   return (
     <>
-      <h3>Configuración del negocio</h3>
       {configMessage && <div className="status-notice success">{configMessage}</div>}
       {configLoading ? (
         <p>Cargando configuración...</p>

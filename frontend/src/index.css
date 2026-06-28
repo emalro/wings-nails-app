@@ -157,31 +157,25 @@
     outline-offset: 2px;
   }
 
-  /* ── Scroll-to-top (only glass element) ── */
+  /* ── Scroll-to-top (matches .whatsapp-fab style, sits BELOW it) ── */
   .scroll-to-top {
     position: fixed;
-    bottom: 24px;
+    bottom: 100px;
     right: 24px;
-    width: 48px;
-    height: 48px;
-    z-index: 90;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: var(--on-primary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(184, 87, 118, 0.75);  /* glass: rose tint with alpha */
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-    color: var(--on-primary);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 50%;
+    z-index: 90;
     box-shadow: var(--shadow-md);
-    transition: opacity 0.2s, transform 0.2s;
+    transition: all .2s;
+    border: none;
   }
-  .scroll-to-top:hover { transform: translateY(-2px); }
-  /* Solid rose fallback when backdrop-filter unsupported */
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .scroll-to-top { background: var(--primary); }
-  }
+  .scroll-to-top:hover { background: var(--tertiary); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 }
 
 @layer components {
@@ -225,7 +219,7 @@
   .section { padding: 72px 20px; }
   .section-alt { background: var(--surface); }
   .section-header { text-align: center; margin-bottom: 48px; }
-  .section-header .overline { display: inline-block; font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 8px; }
+  .section-header .overline { display: inline-block; font-size: 1rem; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 8px; }
   .section-header h2 { font-family: var(--font-display); font-size: clamp(1.6rem,2.8vw,2.4rem); font-weight: 700; color: var(--on-background); margin-bottom: 12px; }
   .section-header p { color: var(--on-surface-variant); max-width: 520px; margin: 0 auto; font-size: 1rem; }
 
@@ -257,8 +251,17 @@
   .conectemos-chip.chip-facebook:hover { background: var(--tertiary); color: var(--on-tertiary); transform: translateY(-2px); }
   .conectemos-address { text-align: center; margin-top: 32px; color: var(--on-surface-variant); font-size: 1rem; }
 
-  /* ── Floating WhatsApp FAB ── */
-  .whatsapp-fab { position: fixed; bottom: 24px; left: 24px; width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: inline-flex; align-items: center; justify-content: center; z-index: 80; box-shadow: var(--shadow-md); transition: all .2s; border: none; }
+  /* ── Floating WhatsApp FAB (bottom-right) ── */
+  .whatsapp-fab { position: fixed; bottom: 172px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: inline-flex; align-items: center; justify-content: center; z-index: 80; box-shadow: var(--shadow-md); transition: all .2s; border: none; }
+
+  /* Mobile: shrink the floating buttons so they don't feel so voluminous. */
+  @media (max-width: 767px) {
+    .whatsapp-fab,
+    .scroll-to-top {
+      width: 44px;
+      height: 44px;
+    }
+  }
   .whatsapp-fab:hover { background: var(--tertiary); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
 
   /* ── CTA Section ── */
@@ -307,6 +310,7 @@
   /* ── Admin ── */
   .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 28px 0; }
   .admin-card { background: var(--surface); border: 1px solid var(--outline-variant); border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-sm); }
+  .agenda-section { background: var(--surface); border: 1.5px solid var(--outline); border-radius: var(--radius-lg); padding: 28px; box-shadow: var(--shadow-md); }
   .admin-card h3 { font-family: var(--font-display); font-size: 1.15rem; margin-bottom: 20px; }
   .admin-card h4 { font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 16px; }
   .service-form { display: grid; gap: 16px; }

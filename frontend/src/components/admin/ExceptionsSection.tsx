@@ -48,8 +48,7 @@ export default function ExceptionsSection({
   handleDeleteException,
 }: ExceptionsSectionProps) {
   return (
-    <>
-      <h3>Excepciones</h3>
+    <>  
       {exceptionMessage && <div className="status-notice success">{exceptionMessage}</div>}
 
       <div className="flex gap-2 flex-col sm:flex-row flex-wrap items-start sm:items-center mb-4">

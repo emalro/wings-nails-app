@@ -3,6 +3,7 @@ import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useCo
 import { useFormValidation } from '../hooks/useFormValidation'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
+import CopyButton from '../components/CopyButton'
 import type { ConfigType } from '../api'
 
 type Service = {
@@ -193,7 +194,7 @@ export default function Reservar() {
   // ── WhatsApp helpers ────────────────────────────────────────────────
 
   function buildWhatsAppUrl(configData: ConfigType | undefined) {
-    if (!configData?.whatsapp_number || !appointment) return null
+    if (!configData?.whatsapp_number || !appointment) return undefined
     const number = configData.whatsapp_number
     const fechaObj = new Date(appointment.fecha_hora_cita)
     const fecha = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
@@ -517,10 +518,16 @@ export default function Reservar() {
           <div className="summary-card mb-5">
             <h3>Datos bancarios</h3>
             {config?.cbu_alias && (
-              <p><strong>Alias:</strong> {config.cbu_alias}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="m-0 break-all"><strong>Alias:</strong> {config.cbu_alias}</p>
+                <CopyButton value={config.cbu_alias} label="Copiar alias" />
+              </div>
             )}
             {config?.cbu_number && (
-              <p><strong>CBU:</strong> {config.cbu_number}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="m-0 break-all"><strong>CBU:</strong> {config.cbu_number}</p>
+                <CopyButton value={config.cbu_number} label="Copiar CBU" />
+              </div>
             )}
           </div>
         ) : (
@@ -533,7 +540,7 @@ export default function Reservar() {
 
         {hasWhatsApp ? (
           <a
-            href={whatsappUrl || '#'}
+            href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="button-primary inline-flex items-center justify-center gap-2 no-underline w-full"
