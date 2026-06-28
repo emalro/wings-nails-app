@@ -112,3 +112,30 @@ export function capitalize(s: string): string {
   if (!s) return s
   return s.charAt(0).toLocaleUpperCase('es-AR') + s.slice(1)
 }
+
+/**
+ * Parse a naive ISO datetime string ("YYYY-MM-DDTHH:MM" with optional
+ * seconds and/or "Z" suffix) as LOCAL time, not UTC.
+ *
+ * This is the contract established by PR #49 (REQ-DCO-001/003/004):
+ * the backend serializes all appointment datetimes as wall-clock time
+ * in Argentina (UTC-3). Parsing them with `new Date(iso)` would treat
+ * the Z-less string as local, which happens to work, but any explicit
+ * `Z` (or "+00:00" offset) would shift the wall-clock by 3 hours.
+ *
+ * Returns a Date whose year/month/day/hour/minute match the input
+ * string byte-for-byte, regardless of the runtime timezone. Returns
+ * null for unparseable input so callers can render an empty cell.
+ */
+export function parseLocalISODateTime(s: string | null | undefined): Date | null {
+  if (!s) return null
+  const [datePart, timePart] = s.split('T')
+  if (!datePart) return null
+  const [y, mo, d] = datePart.split('-').map(Number)
+  if (!y || !mo || !d) return null
+  // Strip a trailing offset like "Z" or "+00:00" — the helper always
+  // treats the wall-clock as local Argentina time per REQ-DCO-001/003/004.
+  const cleanedTime = (timePart || '').replace(/[Zz]|[+-]\d{2}:?\d{2}$/, '')
+  const [h = 0, mi = 0, se = 0] = cleanedTime.split(':').map(Number)
+  return new Date(y, mo - 1, d, h, mi, se)
+}
