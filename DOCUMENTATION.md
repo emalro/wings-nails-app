@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 27/06/2026
+> Última actualización: 28/06/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -248,6 +248,22 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Impacto esperado**: Refresh visual completo sin cambios funcionales. Mejor contraste WCAG 2.2 AA en pares críticos. Skip link, focus rings, y motion gate mejoran el acceso a teclado. La excepción `--status-pending` warm gold se mantiene por su significado semántico, no por decoración.
 - **size:exception**: El forecast de diff fue 600–750 líneas vs el presupuesto de revisión de 400. El usuario aprobó formalmente la excepción antes del apply phase; se documentó en `sdd/visual-style-refresh/size-exception` (Engram topic). Se solicitó excepción formal porque la refresh toca toda la app de forma acoplada; partir en chained PRs introduciría estados intermedios donde medio shell usa tokens nuevos y medio usa viejos.
 
+### 2026-06-28 — Custom alert frontend para seña > precio (REQ-DVA-001..005)
+
+- **Tipo**: Nueva funcionalidad / Mejora (SDD: deposit-front-alert)
+- **Descripción**: Cierra el pendiente `deposit-validation/front-alert/todo` heredado de PR #47 (`8e5d568`). El backend ya emite `PydanticCustomError` con `type === "seña_excede_precio"` (con ñ, desde `Servicio*`) o `type === "sena_excede_precio"` (sin ñ, desde `Cita*`); el frontend ahora muestra un mensaje en español específico para esa violación en lugar de comerse la lista `[object Object]` detrás de un `||` fallback. Cierra también S-1 (offset `-03:00` explícito) y S-2 (round-trip PATCH con Z) del verify-report de `tz-argentina-display` (engram #228 §6).
+- **Archivos**:
+  - `frontend/src/lib/apiErrors.ts` (nuevo) — helper `getApiError(err)` + tabla `API_ERROR_MESSAGES` con ambas spellings; type `ApiError` y `ApiErrorType`.
+  - `frontend/src/lib/apiErrors.test.ts` (nuevo) — 6 casos Vitest: cita context (no ñ), service context (con ñ), unknown 422, 422 con `detail` string, error no-Axios, error plano.
+  - `frontend/src/pages/Reservar.tsx` (modificado) — branch 422 de `handleConfirm` consume `getApiError(err).message`.
+  - `frontend/src/components/ManualAppointmentModal.tsx` (modificado) — catch de `createAppointment` consume `getApiError(err).message`.
+  - `frontend/src/pages/Admin.tsx` (modificado) — `handleSaveAppointment`, `handleCreateService`, `handleUpdateService` consumen `getApiError(err).message`.
+  - `backend/tests/test_api.py` (modificado) — 1 sub-assertion S-1 en `test_appointment_datetime_aware_input_serializes_naive`, 1 test nuevo S-2 `test_cita_patch_with_z_suffix_preserves_wall_clock`, 2 tests nuevos anti-typo `test_post_services_with_sena_mayor_returns_422_with_literal_type_senia` y `test_post_appointments_with_sena_mayor_returns_422_with_literal_type_sena`.
+- **Requisitos**: REQ-DVA-001 (backend emitters ya en main), REQ-DVA-002 (frontend custom alert en 4 superficies), REQ-DVA-003 (anti-typo guard), REQ-DVA-004 (S-1 offset `-03:00`), REQ-DVA-005 (S-2 round-trip PATCH).
+- **SDD**: `openspec/changes/deposit-front-alert/`
+- **Motivo**: UX de error. La violación `seña > precio` es una regla de negocio que la manicurista necesita entender de un vistazo; el fallback genérico la ocultaba detrás de `[object Object]`. El anti-typo guard blinda el contrato frontend-backend contra "typo fix" futuros que rompan el match en silencio. S-1 y S-2 cierran gaps del verify-report de la fix previa de timezone.
+- **Impacto esperado**: Mensajes de error específicos (servicio vs turno) en lugar de `[object Object]` en 4 superficies. 114 tests backend pasando (era 111). 6 tests Vitest nuevos. `npx tsc --noEmit` limpio. Sin migraciones de DB, sin schema drift. Revert restaura el `||` fallback previo sin side effects.
+
 ---
 
 ## Decisiones de diseño (ARCHITECTURE DECISIONS)
@@ -368,3 +384,19 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
   - Strip directo (`replace(tzinfo=None)`) en input en vez de conversión a UTC — el sistema opera en un único timezone, "store lo que la usuaria quiso decir" es la convención correcta.
   - Test usa aserciones directas sobre modelos Pydantic además de smoke tests de integración — SQLite strippea tzinfo en el read, por lo que la ruta de integración no puede reproducir el bug de PostgreSQL. Las aserciones Pydantic sí lo capturan.
 - **Riesgo residual**: Ninguno en el flujo actual. Si se agrega un nuevo endpoint que devuelva datetime, debe declarar `response_model` (CitaRead/ClienteRead) o aplicar `naive()` manualmente — el comentario inline en `get_busy_slots` lo documenta.
+
+### 2026-06-28 — Fix: calendario admin — días en español y min/max ajustado a turnos
+
+- **Tipo**: Corrección de UX
+- **Descripción**: Dos issues en `frontend/src/components/CalendarView.tsx` (calendario admin con `react-big-calendar`):
+  1. `react-big-calendar` trae un objeto `messages` default en inglés (`allDay`, `previous`, `next`, `today`, `noEventsInRange`, `showMore`, etc.) que se filtraba en la UI. El custom Toolbar al pie pisa solo los nombres de las views (Día/Semana/Mes) pero no el resto. Ahora se pasa un `messages` con todas las traducciones al español.
+  2. El `min` y `max` del calendario se fijaban en `hora_apertura` y `hora_cierre` del horario efectivo, por lo que el grid mostraba todas las horas del rango de operación aunque no hubiera turnos. Ahora computa los bounds desde los appointments presentes en la vista actual (día o semana), con padding de 1h y clamp contra apertura/cierre. Si no hay turnos en la vista, cae al comportamiento anterior (apertura/cierre).
+- **Archivos afectados**: `frontend/src/components/CalendarView.tsx` (calendarMessages agregado, viewBounds useMemo para min/max ajustado a turnos, prop `messages` en `<Calendar>`)
+- **Requisitos relacionados**: ninguno formal (UI/UX). Cambio chico y autocontenido, sin implicancia en el spec.
+- **Motivo**: Issue reportado por la usuaria — días de la semana y textos auxiliares (allDay, noEventsInRange, +N more) salían en inglés, y la vista diaria/semanal mostraba horas vacías arriba/abajo del bloque real de turnos.
+- **Impacto esperado**: Calendario admin completamente en español y el rango visible se ajusta a los turnos existentes con un margen razonable.
+- **Decisiones técnicas**:
+  - Reutilizar `date-fns/locale es` ya importado para `startOfWeek`/`endOfWeek` con `weekStartsOn: 1` (lunes) — consistente con el resto del código que arranca la semana en lunes.
+  - Padding de 1h antes del primer turno y después del último: evita que los eventos queden pegados al borde superior/inferior del grid.
+  - Si no hay turnos en la vista, vuelve a apertura/cierre (no acota a un solo día si la semana entera está vacía).
+- **Riesgo residual**: Si hay un turno a las 23:00 y el cierre es a las 18:00, el `max` se va a 24:00 (porque el turno + 1h padding se extiende más allá del cierre). Esto es intencional — el admin necesita ver el turno aunque caiga fuera del horario comercial. Si el horario flexible se vuelve un problema, se puede ajustar el padding o agregar un cap explícito.
