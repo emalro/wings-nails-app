@@ -15,8 +15,11 @@ import { useFormValidation } from '../hooks/useFormValidation'
 import FieldError from './FieldError'
 import type { ClienteRead, ClienteTelefonoRead, CitaRead } from '../api'
 import DataTable from './DataTable'
+import { normalizePhone } from '../lib/phone'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// A-17: digits-only is canonical. Validate on the normalized string so
+// users can paste a formatted phone and still get accurate feedback.
 const PHONE_RE = /^\d{10,11}$/
 
 function getPrimaryPhone(client: ClienteRead): string {
@@ -66,7 +69,8 @@ export default function ClientSection() {
       initial: '',
       rules: [
         { validate: (v: string) => v.trim().length > 0, message: 'El teléfono es requerido.' },
-        { validate: (v: string) => PHONE_RE.test(v.trim()), message: 'Formato de teléfono inválido (10-11 dígitos).' },
+        // A-17: validate on the normalized string.
+        { validate: (v: string) => PHONE_RE.test(normalizePhone(v)), message: 'Formato de teléfono inválido (10-11 dígitos).' },
       ],
     },
     email: {
@@ -187,7 +191,9 @@ export default function ClientSection() {
 
   function handleAddPhone() {
     if (!selectedClientId || !addPhoneNumber) return
-    const digits = addPhoneNumber.replace(/\D/g, '')
+    // A-17: use the shared normalizePhone so the digits-only contract is
+    // applied uniformly across every "add phone" entry point.
+    const digits = normalizePhone(addPhoneNumber)
     if (digits.length < 7) {
       setMessage('El telefono debe tener al menos 7 digitos.')
       setMessageType('error')

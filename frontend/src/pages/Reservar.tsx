@@ -3,19 +3,11 @@ import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useCo
 import { useFormValidation } from '../hooks/useFormValidation'
 import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
 import { getApiError } from '../lib/apiErrors'
+import { normalizePhone } from '../lib/phone'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
-import type { ConfigType } from '../api'
-
-type Service = {
-  id: number
-  nombre_servicio: string
-  duracion_minutos: number
-  precio_actual: number
-  monto_sena_actual: number
-  descripcion: string
-}
+import type { ConfigType, Servicio } from '../api'
 
 type Step = 'service' | 'form' | 'confirm' | 'payment'
 
@@ -29,6 +21,9 @@ type CreatedAppointment = {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// A-17: the canonical phone format is digits-only (10-11 digits for AR).
+// The form strips formatting before submitting via normalizePhone(), so
+// validation runs on the normalized string. See frontend/src/lib/phone.ts.
 const PHONE_RE = /^\d{10,11}$/
 
 export default function Reservar() {
@@ -56,7 +51,9 @@ export default function Reservar() {
       initial: '',
       rules: [
         { validate: (v: string) => v.trim().length > 0, message: 'El teléfono es obligatorio.' },
-        { validate: (v: string) => PHONE_RE.test(v.trim()), message: 'Ingresá un teléfono válido (10-11 dígitos).' },
+        // A-17: validate on the normalized (digits-only) string so users
+        // can paste a formatted phone and still get accurate feedback.
+        { validate: (v: string) => PHONE_RE.test(normalizePhone(v)), message: 'Ingresá un teléfono válido (10-11 dígitos).' },
       ],
     },
     dni: {
@@ -89,10 +86,10 @@ export default function Reservar() {
   const createClientMutation = useCreateClient()
   const createAppointmentMutation = useCreateAppointment()
 
-  const selectedServiceList = services.filter((s: Service) => selectedServices.includes(s.id))
-  const totalAmount = selectedServiceList.reduce((sum: number, s: Service) => sum + s.precio_actual, 0)
-  const depositAmount = selectedServiceList.reduce((sum: number, s: Service) => sum + s.monto_sena_actual, 0)
-  const totalDuration = selectedServiceList.reduce((sum: number, s: Service) => sum + s.duracion_minutos, 0)
+  const selectedServiceList = services.filter((s: Servicio) => selectedServices.includes(s.id))
+  const totalAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.precio_actual, 0)
+  const depositAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.monto_sena_actual, 0)
+  const totalDuration = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.duracion_minutos, 0)
 
   function isBusySlot(dateTime: string, durationMinutes: number) {
     const selectedStart = new Date(dateTime)
@@ -149,7 +146,9 @@ export default function Reservar() {
       const client = await createClientMutation.mutateAsync({
         nombre: form.values.nombre,
         apellido: form.values.apellido,
-        telefono: form.values.telefono,
+        // A-17: strip formatting before sending so the backend never
+        // sees "+54 (0341) 555-1234" — only digits.
+        telefono: normalizePhone(form.values.telefono),
         dni: form.values.dni,
       })
       const appointmentPayload = {
@@ -157,7 +156,7 @@ export default function Reservar() {
         fecha_hora_cita: form.values.fechaHora,
         precio_historico_cobrado: totalAmount,
         sena_historica_pagada: depositAmount,
-        servicios: selectedServiceList.map((s: Service) => ({
+        servicios: selectedServiceList.map((s: Servicio) => ({
           servicio_id: s.id,
           duracion_minutos: s.duracion_minutos,
           precio_unitario: s.precio_actual,
@@ -236,7 +235,7 @@ export default function Reservar() {
           <div className="empty-state">No hay servicios disponibles.</div>
         ) : (
           <div className="service-grid mb-8">
-            {services.map((service: Service) => {
+            {services.map((service: Servicio) => {
               const isSelected = selectedServices.includes(service.id)
               return (
                 <button
@@ -388,7 +387,7 @@ export default function Reservar() {
             <p>Seleccioná un servicio para ver el detalle.</p>
           ) : (
             <>
-              {selectedServiceList.map((s: Service) => (
+              {selectedServiceList.map((s: Servicio) => (
                 <p key={s.id}><strong>{s.nombre_servicio}</strong> — ${s.precio_actual}</p>
               ))}
               <hr className="my-2 border-none border-t border-[var(--border)]" />
@@ -431,7 +430,7 @@ export default function Reservar() {
                 <tr>
                   <td className="py-1.5 text-[var(--muted)] align-top">Servicios</td>
                   <td className="py-1.5 text-right font-semibold">
-                    {selectedServiceList.map((s: Service) => (
+                    {selectedServiceList.map((s: Servicio) => (
                       <div key={s.id}>{s.nombre_servicio} — ${s.precio_actual}</div>
                     ))}
                   </td>

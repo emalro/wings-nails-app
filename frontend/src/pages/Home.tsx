@@ -3,15 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useServices, useConfig } from '../hooks'
 import { isContactUrl } from '../lib/contactLinks'
 import { SkeletonLoader } from '../components/SkeletonLoader'
-
-type Service = {
-  id: number
-  nombre_servicio: string
-  duracion_minutos: number
-  precio_actual: number
-  monto_sena_actual: number
-  descripcion: string
-}
+import type { Servicio } from '../api'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -92,7 +84,7 @@ export default function Home() {
             <div className="empty-state">No hay servicios disponibles por el momento.</div>
           ) : (
             <div className="service-grid">
-              {services.map((service: Service, idx: number) => (
+              {services.map((service: Servicio, idx: number) => (
                 <div
                   key={service.id}
                   className={`service-card${showBentoFeature && idx === 0 ? ' bento-feature' : ''}`}

@@ -1,15 +1,8 @@
 import React from 'react'
 import DataTable from '../DataTable'
+import type { Servicio } from '../../api'
 
-type Service = {
-  id: number
-  nombre_servicio: string
-  duracion_minutos: number
-  precio_actual: number
-  monto_sena_actual: number
-  descripcion: string
-  activo: boolean
-}
+type Service = Servicio
 
 type ServicePayload = {
   nombre_servicio: string

@@ -12,14 +12,17 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
-from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash
+from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
 from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+# COOKIE_SECURE defaults to TRUE so production cookies always carry the
+# Secure flag. Local dev (plain http://) opts out by setting COOKIE_SECURE=false
+# in .env. render.yaml explicitly sets it to "true" — see B-6.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
 
 
@@ -136,8 +139,34 @@ def seed_admin_user(session: Session) -> None:
     session.add(user)
     session.commit()
 
+def _validate_jwt_secret_key() -> None:
+    """Hard-fail at startup if JWT_SECRET_KEY is missing or too short.
+
+    B-5 (judgment-day): python-jose does not reject an empty/short secret,
+    so the app would silently sign every token with a weak key. Require
+    at least MIN_SECRET_KEY_BYTES (32) bytes to keep the signing key out
+    of brute-force range. The check runs in lifespan so tests that set
+    os.environ["JWT_SECRET_KEY"] before importing the app still work.
+    """
+    import logging
+    secret = os.getenv("JWT_SECRET_KEY")
+    if not secret:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is not set. Refusing to start: signing tokens "
+            "with an empty key is a critical security failure. See B-5."
+        )
+    if len(secret.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
+        raise RuntimeError(
+            f"JWT_SECRET_KEY is too short ({len(secret)} bytes). "
+            f"Refusing to start: it must be at least {MIN_SECRET_KEY_BYTES} "
+            f"bytes. See B-5."
+        )
+    logging.getLogger(__name__).info("JWT_SECRET_KEY validated.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
+    _validate_jwt_secret_key()
     create_db_and_tables()
     for fn in [run_migration, seed_default_config, seed_default_schedule, seed_admin_user]:
         try:
@@ -296,7 +325,14 @@ def update_config(update: ConfiguracionUpdate, current_user: Usuario = Depends(g
 
 
 def _attach_telefonos(client: Cliente, session: Session) -> dict:
-    """Build ClienteRead-compatible dict with telefonos attached (values JSON-safe)."""
+    """Build ClienteRead-compatible dict with telefonos attached (values JSON-safe).
+
+    A-18: route through ClienteRead instead of hand-rolling the dict so the
+    @field_serializer on fecha_creacion (and any field added in the future)
+    runs. We start from the ORM's model_dump and inject telefonos before
+    re-validating — the re-validation runs every Pydantic serializer so
+    datetime values come out without the `Z` suffix.
+    """
     data = client.model_dump(mode="json")
     phones = session.exec(
         select(ClienteTelefono)
@@ -304,7 +340,7 @@ def _attach_telefonos(client: Cliente, session: Session) -> dict:
         .order_by(ClienteTelefono.es_principal.desc(), ClienteTelefono.id)
     ).all()
     data["telefonos"] = [ClienteTelefonoRead.model_validate(p).model_dump(mode="json") for p in phones]
-    return data
+    return ClienteRead.model_validate(data).model_dump(mode="json")
 
 
 def _build_cliente_read_response(client: Cliente, session: Session) -> dict:
@@ -725,6 +761,15 @@ def find_conflicting_appointment(start: datetime, duration_minutes: int, session
 
 
 def build_cita_response(cita: Cita, session: Session) -> dict:
+    """Build CitaRead-compatible dict for a cita.
+
+    A-2: route through CitaRead instead of hand-rolling the dict so the
+    @field_serializer on fecha_hora_cita / fecha_registro_cita runs (strips
+    tzinfo) and any field added to CitaRead in the future is automatically
+    included. We seed the dict with the ORM dump, then attach the three
+    joined fields (servicios, cliente_nombre, duracion_total_minutos)
+    before re-validating through CitaRead.
+    """
     items = session.exec(select(CitaServicio).where(CitaServicio.cita_id == cita.id)).all()
     servicios = []
     for item in items:
@@ -739,11 +784,11 @@ def build_cita_response(cita: Cita, session: Session) -> dict:
 
     client = session.get(Cliente, cita.id_cliente)
     duration = sum(item.duracion_minutos for item in items)
-    cita_data = cita.model_dump()
+    cita_data = cita.model_dump(mode="json")
     cita_data["cliente_nombre"] = f"{client.nombre} {client.apellido}" if client else None
     cita_data["duracion_total_minutos"] = duration
     cita_data["servicios"] = servicios
-    return cita_data
+    return CitaRead.model_validate(cita_data).model_dump(mode="json")
 
 
 @app.post("/appointments", response_model=CitaRead)
@@ -914,12 +959,9 @@ def get_busy_slots(date_str: str, session: Session = Depends(get_session)):
     citas = session.exec(select(Cita).where(Cita.estado_cita.in_(active_states))).all()
     busy_slots = []
 
-    # naive() wrap REQUIRED on BOTH the comparison (below) AND the isoformat
-    # serialization below. The CitaRead @field_serializer does NOT run here
-    # because this endpoint has no response_model. — REQ-DCO-004 PROD-B +
-    # comparison
-    def naive(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    # naive() is the module-level helper above — wraps both the comparison
+    # AND the isoformat serialization below. CitaRead's @field_serializer
+    # does NOT run here because this endpoint has no response_model.
 
     for cita in citas:
         duration = calculate_duration_for_cita(cita, session)

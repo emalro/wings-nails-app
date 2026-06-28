@@ -29,7 +29,6 @@ class Cliente(ClienteBase, table=True):
     cantidad_turnos_tomados: int = Field(default=0)
     cantidad_turnos_abonados: int = Field(default=0)
     cantidad_turnos_cancelados_vencidos: int = Field(default=0)
-    # Relationship fields removed for simpler ORM mapping in initial prototype
 
 
 class ClienteTelefono(SQLModel, table=True):
@@ -52,7 +51,6 @@ class ServicioBase(SQLModel):
 
 class Servicio(ServicioBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    # Relationship fields removed for simpler ORM mapping in initial prototype
 
 
 class CitaBase(SQLModel):
@@ -69,7 +67,6 @@ class CitaBase(SQLModel):
 class Cita(CitaBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     id_cliente: int = Field(foreign_key="cliente.id")
-    # Relationship fields removed for simpler ORM mapping in initial prototype
     fecha_registro_cita: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -79,7 +76,6 @@ class CitaServicio(SQLModel, table=True):
     duracion_minutos: int
     precio_unitario: float
     subtotal: float
-    # Relationship fields removed for simpler ORM mapping in initial prototype
 
 
 class HorarioSemanal(SQLModel, table=True):

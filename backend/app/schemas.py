@@ -8,7 +8,14 @@ from .models import EstadoCita
 
 
 def normalize_phone(phone: str) -> str:
-    """Strip everything except digits. Reusable in validation AND search."""
+    """Strip everything except digits. Reusable in validation AND search.
+
+    A-17: the canonical wire format for telefono is digits-only. The
+    frontend may collect formatted input ("+54 341 555-1234") but
+    submission to the backend, search-by-phone, and storage all go
+    through this single function so the format is consistent across
+    the system.
+    """
     return re.sub(r"\D", "", phone)
 
 
@@ -34,6 +41,10 @@ class ClienteCreate(BaseModel):
     @field_validator("telefono")
     @classmethod
     def validate_telefono(cls, v: str) -> str:
+        # A-17: digits-only is the canonical wire format. Allow common
+        # formatting chars (spaces, dashes, plus, parens) in the input
+        # so users can paste a phone from their contacts, but normalize
+        # to digits-only BEFORE the length check and before returning.
         clean = re.sub(r"[^\d\s\-\+\(\)]", "", v)
         if clean != v:
             raise ValueError("Teléfono: caracteres no válidos")

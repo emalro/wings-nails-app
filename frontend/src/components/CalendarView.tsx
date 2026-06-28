@@ -5,6 +5,7 @@ import { es } from 'date-fns/locale'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { useEffectiveHours } from '../hooks'
 import { getStatusColor, getStatusVar } from '../lib/statusColors'
+import { parseLocalISODateTime } from '../lib/datetime'
 
 interface AppointmentService {
   servicio_id: number
@@ -122,20 +123,16 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
           end: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0),
         }
     const inView = appointments.filter((cita) => {
-      const [dp, tp] = cita.fecha_hora_cita.split('T')
-      const [y, mo, d] = dp.split('-').map(Number)
-      const [h, mi] = (tp || '00:00').split(':').map(Number)
-      const start = new Date(y, mo - 1, d, h, mi)
+      const start = parseLocalISODateTime(cita.fecha_hora_cita)
+      if (!start) return false
       return start >= bounds.start && start < bounds.end
     })
     if (!inView.length) return null
     let minStart: Date | null = null
     let maxEnd: Date | null = null
     for (const cita of inView) {
-      const [dp, tp] = cita.fecha_hora_cita.split('T')
-      const [y, mo, d] = dp.split('-').map(Number)
-      const [h, mi] = (tp || '00:00').split(':').map(Number)
-      const start = new Date(y, mo - 1, d, h, mi)
+      const start = parseLocalISODateTime(cita.fecha_hora_cita)
+      if (!start) continue
       const end = new Date(start.getTime() + cita.duracion_total_minutos * 60 * 1000)
       if (!minStart || start < minStart) minStart = start
       if (!maxEnd || end > maxEnd) maxEnd = end
@@ -164,10 +161,9 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
     : cierreTime
 
   const events: CalendarEvent[] = appointments.map((cita) => {
-    // REQ-DCO-001/003: parse naive datetime string without UTC conversion
-    const [datePart, timePart] = cita.fecha_hora_cita.split('T')
-    const [hours, minutes] = (timePart || '00:00').split(':').map(Number)
-    const start = new Date(parseInt(datePart.slice(0,4)), parseInt(datePart.slice(5,7)) - 1, parseInt(datePart.slice(8,10)), hours, minutes)
+    // REQ-DCO-001/003: parse naive ISO datetime as local Argentina time.
+    // parseLocalISODateTime encodes the contract — no UTC conversion.
+    const start = parseLocalISODateTime(cita.fecha_hora_cita) ?? new Date(NaN)
     const end = new Date(start.getTime() + cita.duracion_total_minutos * 60 * 1000)
     return {
       title: cita.cliente_nombre || `Cita #${cita.id}`,

@@ -9,10 +9,17 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+# SECRET_KEY is read at module-import time. The lifespan check in
+# app.main validates the env var (presence + 32-byte minimum) before
+# any endpoint is reachable, so SECRET_KEY is guaranteed non-empty here
+# at runtime. We deliberately do NOT default to "" because python-jose
+# would happily sign tokens with an empty key — see B-5.
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+MIN_SECRET_KEY_BYTES = 32
 
 
 def get_password_hash(password: str) -> str:

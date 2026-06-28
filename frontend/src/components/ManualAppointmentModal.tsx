@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useServices, useCreateClient, useClientSearch, useCreateManualAppointment } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
 import { getApiError } from '../lib/apiErrors'
+import { normalizePhone } from '../lib/phone'
 import FieldError from './FieldError'
 import type { ClienteRead } from '../api'
 
@@ -172,7 +173,9 @@ export default function ManualAppointmentModal({ isOpen, onClose, onAppointmentC
       const client = await createClientMutation.mutateAsync({
         nombre: quickNombre,
         apellido: quickApellido,
-        telefono: quickTelefono,
+        // A-17: strip formatting so the backend never sees a formatted
+        // phone — keep every "create client" entry point consistent.
+        telefono: normalizePhone(quickTelefono),
         dni: quickDni,
       })
       setSelectedClient(client)
