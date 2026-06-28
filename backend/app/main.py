@@ -325,7 +325,14 @@ def update_config(update: ConfiguracionUpdate, current_user: Usuario = Depends(g
 
 
 def _attach_telefonos(client: Cliente, session: Session) -> dict:
-    """Build ClienteRead-compatible dict with telefonos attached (values JSON-safe)."""
+    """Build ClienteRead-compatible dict with telefonos attached (values JSON-safe).
+
+    A-18: route through ClienteRead instead of hand-rolling the dict so the
+    @field_serializer on fecha_creacion (and any field added in the future)
+    runs. We start from the ORM's model_dump and inject telefonos before
+    re-validating — the re-validation runs every Pydantic serializer so
+    datetime values come out without the `Z` suffix.
+    """
     data = client.model_dump(mode="json")
     phones = session.exec(
         select(ClienteTelefono)
@@ -333,7 +340,7 @@ def _attach_telefonos(client: Cliente, session: Session) -> dict:
         .order_by(ClienteTelefono.es_principal.desc(), ClienteTelefono.id)
     ).all()
     data["telefonos"] = [ClienteTelefonoRead.model_validate(p).model_dump(mode="json") for p in phones]
-    return data
+    return ClienteRead.model_validate(data).model_dump(mode="json")
 
 
 def _build_cliente_read_response(client: Cliente, session: Session) -> dict:
@@ -754,6 +761,15 @@ def find_conflicting_appointment(start: datetime, duration_minutes: int, session
 
 
 def build_cita_response(cita: Cita, session: Session) -> dict:
+    """Build CitaRead-compatible dict for a cita.
+
+    A-2: route through CitaRead instead of hand-rolling the dict so the
+    @field_serializer on fecha_hora_cita / fecha_registro_cita runs (strips
+    tzinfo) and any field added to CitaRead in the future is automatically
+    included. We seed the dict with the ORM dump, then attach the three
+    joined fields (servicios, cliente_nombre, duracion_total_minutos)
+    before re-validating through CitaRead.
+    """
     items = session.exec(select(CitaServicio).where(CitaServicio.cita_id == cita.id)).all()
     servicios = []
     for item in items:
@@ -768,11 +784,11 @@ def build_cita_response(cita: Cita, session: Session) -> dict:
 
     client = session.get(Cliente, cita.id_cliente)
     duration = sum(item.duracion_minutos for item in items)
-    cita_data = cita.model_dump()
+    cita_data = cita.model_dump(mode="json")
     cita_data["cliente_nombre"] = f"{client.nombre} {client.apellido}" if client else None
     cita_data["duracion_total_minutos"] = duration
     cita_data["servicios"] = servicios
-    return cita_data
+    return CitaRead.model_validate(cita_data).model_dump(mode="json")
 
 
 @app.post("/appointments", response_model=CitaRead)
