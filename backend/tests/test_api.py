@@ -2,6 +2,8 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
 
@@ -23,6 +25,19 @@ with Session(engine) as session:
     seed_default_schedule(session)
 
 client = TestClient(app, base_url="https://testserver")
+
+
+# ── B-8: autouse fixture to reset the slowapi rate limiter between tests ───
+# POST /clients and POST /appointments now carry a per-IP "10/minute" limit
+# (public booking flow, no auth). Since every TestClient call shares the same
+# remote address ("testclient"), a long test file would otherwise exhaust the
+# budget after 10 calls. Resetting the storage after each test gives every
+# test a clean rate-limit window without weakening the production limit.
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    yield
+    from app.main import limiter
+    limiter.reset()
 
 # ── Auth setup for protected endpoints ─────────────────────────────────
 # Create a real user and login so the TestClient has auth cookies
@@ -2434,4 +2449,143 @@ def test_post_appointments_with_sena_mayor_returns_422_with_literal_type_sena():
     assert detail[0]["type"] == "sena_excede_precio", (
         f"REQ-DVA-003 (appointments): expected literal 'sena_excede_precio' (no ñ), "
         f"got {detail[0]['type']!r}"
+    )
+
+
+# ── B-8: Public booking flow (lookup-or-create by DNI, no JWT) ─────────────
+# The /reservar page lets a visitor self-register and book an appointment
+# without logging in. This test exercises that flow end-to-end using a fresh
+# TestClient (no auth cookies) and a unique remote address so the public
+# endpoint's per-IP rate limit doesn't collide with the shared test client.
+
+
+def test_public_booking_flow_lookup_or_create_by_dni():
+    """B-8: /reservar flow — public client self-registration + appointment.
+
+    Covers:
+    1. POST /clients without a JWT → 201, new client created.
+    2. POST /clients again with the same DNI → 200, same client returned
+       (lookup-or-create, no duplicate row).
+    3. POST /appointments without a JWT → 200, appointment created.
+    4. GET /busy_slots → the new appointment shows up as busy.
+    5. Rate limit: 11th call to /clients from the same IP in <1min → 429.
+    """
+    from fastapi.testclient import TestClient as TC
+    from app.main import app as public_app
+    import uuid
+
+    # Use a unique remote address so the public endpoint's rate limit
+    # bucket is isolated from the shared `client` used by the rest of
+    # the suite (which has already exhausted the "10/minute" budget on
+    # /clients by the time this test runs).
+    unique_ip = f"203.0.113.{uuid.uuid4().int % 254 + 1}"
+    public = TC(public_app, base_url="https://testserver", client=(unique_ip, 5000))
+
+    # 0. Create a service via the admin (authenticated) client so the
+    #    public appointment has a valid servicio_id to reference.
+    days_offset, minutes_offset = _unique_date_offset()
+    service_payload = {
+        "nombre_servicio": "Manicura Public",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Public booking test service",
+        "activo": True,
+    }
+    svc_resp = client.post("/services", json=service_payload)
+    assert svc_resp.status_code == 200, f"Service setup failed: {svc_resp.text}"
+    service_id = svc_resp.json()["id"]
+
+    # 1. POST /clients with a fresh DNI — no auth header, no cookies.
+    dni = _unique_dni()
+    phone = _unique_phone()
+    client_payload = {
+        "nombre": "Public",
+        "apellido": "Booker",
+        "dni": dni,
+        "telefono": phone,
+    }
+    r1 = public.post("/clients", json=client_payload)
+    assert r1.status_code == 201, (
+        f"Public POST /clients (new DNI) should return 201, got "
+        f"{r1.status_code}: {r1.text}"
+    )
+    data1 = r1.json()
+    assert data1["dni"] == dni
+    assert data1["nombre"] == "Public"
+    new_client_id = data1["id"]
+
+    # 2. POST /clients again with the SAME DNI — must return the existing
+    #    client (lookup-or-create), not a 201 duplicate.
+    r2 = public.post("/clients", json=client_payload)
+    assert r2.status_code == 200, (
+        f"Public POST /clients (existing DNI) should return 200, got "
+        f"{r2.status_code}: {r2.text}"
+    )
+    data2 = r2.json()
+    assert data2["id"] == new_client_id, (
+        f"Lookup-or-create should return the same client id "
+        f"({new_client_id}), got {data2['id']}"
+    )
+    assert data2["dni"] == dni
+
+    # 3. POST /appointments for the new client — no auth header.
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset, minutes=minutes_offset)
+    appt_payload = {
+        "id_cliente": new_client_id,
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "metodo_pago_sena": "Transferencia",
+        "servicios": [
+            {
+                "servicio_id": service_id,
+                "duracion_minutos": 60,
+                "precio_unitario": 2500.0,
+                "subtotal": 2500.0,
+            }
+        ],
+    }
+    r3 = public.post("/appointments", json=appt_payload)
+    assert r3.status_code == 200, (
+        f"Public POST /appointments should return 200, got "
+        f"{r3.status_code}: {r3.text}"
+    )
+    appt_data = r3.json()
+    assert appt_data["id_cliente"] == new_client_id
+
+    # 4. GET /busy_slots — the new appointment must show up.
+    busy = public.get(f"/busy_slots?date_str={appt_dt.date().isoformat()}")
+    assert busy.status_code == 200
+    busy_list = busy.json()
+    appt_start_str = appt_dt.isoformat()
+    assert any(
+        b.get("cita_id") == appt_data["id"] for b in busy_list
+    ), f"New appointment {appt_data['id']} not found in busy_slots: {busy_list}"
+
+    # 5. Rate limit: 11th call to /clients from the same IP → 429.
+    #    We've already made 2 successful calls (steps 1-2). Make 8 more
+    #    to reach 10, then the 11th must be rate-limited.
+    for i in range(8):
+        rl_payload = {
+            "nombre": f"Rate{i}",
+            "apellido": "Limit",
+            "dni": _unique_dni(),
+            "telefono": _unique_phone(),
+        }
+        rl_resp = public.post("/clients", json=rl_payload)
+        assert rl_resp.status_code in (200, 201), (
+            f"Call {i + 3} to /clients should still be under the limit, "
+            f"got {rl_resp.status_code}: {rl_resp.text}"
+        )
+    # 11th call (3rd from a rate-limit perspective counting the 2 above) → 429
+    over_limit = public.post("/clients", json={
+        "nombre": "Over",
+        "apellido": "Limit",
+        "dni": _unique_dni(),
+        "telefono": _unique_phone(),
+    })
+    assert over_limit.status_code == 429, (
+        f"11th call to /clients should be rate-limited (429), got "
+        f"{over_limit.status_code}: {over_limit.text}"
     )
