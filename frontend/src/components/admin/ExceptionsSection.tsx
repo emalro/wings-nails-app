@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatDate } from '../../lib/datetime'
 
 type Exception = {
   id: number
@@ -98,7 +99,7 @@ export default function ExceptionsSection({
         <ul className="list-none p-0">
           {exceptions.map((exc) => {
             const fecha = new Date(exc.fecha + 'T00:00:00')
-            const fechaStr = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            const fechaStr = formatDate(fecha)
             return (
               <li key={exc.id} className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                 <span>

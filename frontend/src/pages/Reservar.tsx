@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useConfig } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
+import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
@@ -196,9 +197,8 @@ export default function Reservar() {
   function buildWhatsAppUrl(configData: ConfigType | undefined) {
     if (!configData?.whatsapp_number || !appointment) return undefined
     const number = configData.whatsapp_number
-    const fechaObj = new Date(appointment.fecha_hora_cita)
-    const fecha = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-    const hora = fechaObj.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const fecha = formatDateShort(appointment.fecha_hora_cita)
+    const hora = formatTime(appointment.fecha_hora_cita)
     const servicio = appointment.servicios.map(s => s.nombre_servicio).join(', ')
     const total = appointment.precio_historico_cobrado
     const sena = appointment.sena_historica_pagada
@@ -439,7 +439,7 @@ export default function Reservar() {
                 <tr><td className="py-1.5 text-[var(--muted)]">Total</td><td className="py-1.5 text-right font-semibold">${totalAmount}</td></tr>
                 <tr><td className="py-1.5 text-[var(--muted)]">Seña</td><td className="py-1.5 text-right font-semibold">${depositAmount}</td></tr>
                 {form.values.fechaHora && (
-                  <tr><td className="py-1.5 text-[var(--muted)]">Fecha y hora</td><td className="py-1.5 text-right font-semibold">{new Date(form.values.fechaHora).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} {new Date(form.values.fechaHora).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}</td></tr>
+                  <tr><td className="py-1.5 text-[var(--muted)]">Fecha y hora</td><td className="py-1.5 text-right font-semibold">{capitalize(formatDayNameLong(form.values.fechaHora))} {new Date(form.values.fechaHora).getDate()} de {formatMonthName(form.values.fechaHora)} de {new Date(form.values.fechaHora).getFullYear()} — {formatTime(form.values.fechaHora)} hs</td></tr>
                 )}
               </tbody>
             </table>

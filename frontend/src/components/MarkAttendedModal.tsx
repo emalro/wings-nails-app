@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatDate } from '../lib/datetime'
 
 interface AppointmentService {
   servicio_id: number
@@ -52,7 +53,7 @@ export default function MarkAttendedModal({ cita, onClose, onConfirm, isPending 
         </div>
 
         <p className="mb-4 text-[var(--text-secondary)]">
-          {cita.cliente_nombre || `Cliente #${cita.id_cliente}`} — {new Date(cita.fecha_hora_cita).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+          {cita.cliente_nombre || `Cliente #${cita.id_cliente}`} — {formatDate(cita.fecha_hora_cita)}
         </p>
 
         <div className="mb-4">

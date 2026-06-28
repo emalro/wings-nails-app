@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppointment, useUpdateAppointmentStatus, useCreateService, useUpdateService, useDeleteService, useDeleteAppointment, useWeeklySchedule, useUpdateWeeklySchedule, useExceptions, useCreateException, useDeleteException } from '../hooks'
 import { useAuth } from '../hooks/useAuth'
+import { formatDate, formatTime } from '../lib/datetime'
 import CalendarView from '../components/CalendarView'
 import AppointmentModal from '../components/AppointmentModal'
 import MarkAttendedModal from '../components/MarkAttendedModal'
@@ -422,7 +423,7 @@ export default function Admin() {
                   sortFn: (a: any, b: any) => new Date(a.fecha_hora_cita).getTime() - new Date(b.fecha_hora_cita).getTime(),
                   render: (v: string) => {
                     if (!v) return <span className="data-table-null">&mdash;</span>
-                    return new Date(v).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    return formatDate(v)
                   },
                 },
                 {
@@ -430,7 +431,7 @@ export default function Admin() {
                   label: 'Hora',
                   render: (_v: any, row: any) => {
                     if (!row.fecha_hora_cita) return <span className="data-table-null">&mdash;</span>
-                    return new Date(row.fecha_hora_cita).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+                    return formatTime(row.fecha_hora_cita)
                   },
                 },
                 { key: 'estado_cita', label: 'Estado', sortable: true },

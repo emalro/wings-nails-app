@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useBusySlots, useEffectiveHours } from '../hooks'
+import { formatMonthName, formatDayNameLong, capitalize } from '../lib/datetime'
 
 type TimeSlot = {
   hour: number
@@ -115,7 +116,7 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
   const firstDay = getFirstDayOfMonth(currentDate)
   const calendarDays = Array(firstDay).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1))
 
-  const monthName = currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const monthName = capitalize(formatMonthName(currentDate)) + ' ' + currentDate.getFullYear()
 
   return (
     <div className="calendar-container">
@@ -154,7 +155,7 @@ export default function Calendar({ selectedDateTime, onDateTimeChange, serviceDu
 
       {selectedDate && (
         <div className="time-slots-container">
-          <h4>⏰ Horarios disponibles - {selectedDate.toLocaleDateString('es-ES', { weekday: 'long', month: 'long', day: 'numeric' })}</h4>
+          <h4>⏰ Horarios disponibles - {capitalize(formatDayNameLong(selectedDate))} {selectedDate.getDate()} de {formatMonthName(selectedDate)}</h4>
           {loadingHours ? (
             <p>Cargando horarios...</p>
           ) : !effectiveHours ? (
