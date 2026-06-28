@@ -290,6 +290,23 @@ export type ConfigType = {
   cbu_number: string
 }
 
+// ── Service Type ──────────────────────────────────────────────────────
+// A-7: was redeclared as `type Service` in Reservar.tsx, Home.tsx,
+// Admin.tsx, and admin/ServicesSection.tsx with three slightly different
+// shapes (some including `activo`, some not). Centralize the canonical
+// read shape here so every screen compiles against the same model.
+// The backend always returns `activo: boolean` (ServicioRead inherits
+// ServicioBase with `activo: bool = True`), so it stays non-optional.
+export type Servicio = {
+  id: number
+  nombre_servicio: string
+  duracion_minutos: number
+  precio_actual: number
+  monto_sena_actual: number
+  descripcion: string
+  activo: boolean
+}
+
 // ── Client Types ──────────────────────────────────────────────────────
 
 export type ClienteTelefonoRead = {

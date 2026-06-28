@@ -6,16 +6,7 @@ import { getApiError } from '../lib/apiErrors'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
-import type { ConfigType } from '../api'
-
-type Service = {
-  id: number
-  nombre_servicio: string
-  duracion_minutos: number
-  precio_actual: number
-  monto_sena_actual: number
-  descripcion: string
-}
+import type { ConfigType, Servicio } from '../api'
 
 type Step = 'service' | 'form' | 'confirm' | 'payment'
 
@@ -89,10 +80,10 @@ export default function Reservar() {
   const createClientMutation = useCreateClient()
   const createAppointmentMutation = useCreateAppointment()
 
-  const selectedServiceList = services.filter((s: Service) => selectedServices.includes(s.id))
-  const totalAmount = selectedServiceList.reduce((sum: number, s: Service) => sum + s.precio_actual, 0)
-  const depositAmount = selectedServiceList.reduce((sum: number, s: Service) => sum + s.monto_sena_actual, 0)
-  const totalDuration = selectedServiceList.reduce((sum: number, s: Service) => sum + s.duracion_minutos, 0)
+  const selectedServiceList = services.filter((s: Servicio) => selectedServices.includes(s.id))
+  const totalAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.precio_actual, 0)
+  const depositAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.monto_sena_actual, 0)
+  const totalDuration = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.duracion_minutos, 0)
 
   function isBusySlot(dateTime: string, durationMinutes: number) {
     const selectedStart = new Date(dateTime)
@@ -157,7 +148,7 @@ export default function Reservar() {
         fecha_hora_cita: form.values.fechaHora,
         precio_historico_cobrado: totalAmount,
         sena_historica_pagada: depositAmount,
-        servicios: selectedServiceList.map((s: Service) => ({
+        servicios: selectedServiceList.map((s: Servicio) => ({
           servicio_id: s.id,
           duracion_minutos: s.duracion_minutos,
           precio_unitario: s.precio_actual,
@@ -236,7 +227,7 @@ export default function Reservar() {
           <div className="empty-state">No hay servicios disponibles.</div>
         ) : (
           <div className="service-grid mb-8">
-            {services.map((service: Service) => {
+            {services.map((service: Servicio) => {
               const isSelected = selectedServices.includes(service.id)
               return (
                 <button
@@ -388,7 +379,7 @@ export default function Reservar() {
             <p>Seleccioná un servicio para ver el detalle.</p>
           ) : (
             <>
-              {selectedServiceList.map((s: Service) => (
+              {selectedServiceList.map((s: Servicio) => (
                 <p key={s.id}><strong>{s.nombre_servicio}</strong> — ${s.precio_actual}</p>
               ))}
               <hr className="my-2 border-none border-t border-[var(--border)]" />
@@ -431,7 +422,7 @@ export default function Reservar() {
                 <tr>
                   <td className="py-1.5 text-[var(--muted)] align-top">Servicios</td>
                   <td className="py-1.5 text-right font-semibold">
-                    {selectedServiceList.map((s: Service) => (
+                    {selectedServiceList.map((s: Servicio) => (
                       <div key={s.id}>{s.nombre_servicio} — ${s.precio_actual}</div>
                     ))}
                   </td>

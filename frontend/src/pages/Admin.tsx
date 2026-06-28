@@ -15,6 +15,7 @@ import ScheduleSection from '../components/admin/ScheduleSection'
 import ExceptionsSection from '../components/admin/ExceptionsSection'
 import DataTable from '../components/DataTable'
 import type { Column } from '../components/DataTable'
+import type { Servicio } from '../api'
 
 type AppointmentService = {
   servicio_id: number
@@ -41,15 +42,7 @@ type Appointment = {
   servicios: AppointmentService[]
 }
 
-type Service = {
-  id: number
-  nombre_servicio: string
-  duracion_minutos: number
-  precio_actual: number
-  monto_sena_actual: number
-  descripcion: string
-  activo: boolean
-}
+type Service = Servicio
 
 export default function Admin() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
