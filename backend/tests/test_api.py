@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
@@ -27,7 +27,7 @@ client = TestClient(app, base_url="https://testserver")
 # ── Auth setup for protected endpoints ─────────────────────────────────
 # Create a real user and login so the TestClient has auth cookies
 from app.auth import get_password_hash
-from app.models import Usuario
+from app.models import Cita, Usuario
 with Session(engine) as session:
     hashed = get_password_hash("testpass123")
     user = Usuario(
@@ -1422,6 +1422,40 @@ def test_busy_slots_and_conflict_detection():
     conflict_resp = client.post("/appointments", json=conflicting_payload)
     assert conflict_resp.status_code == 409
     assert "ocupado" in conflict_resp.json()["detail"]
+
+
+def test_get_busy_slots_handles_aware_datetimes():
+    """Regression: the date-range filter in get_busy_slots compares
+    cita.fecha_hora_cita (aware in production PostgreSQL/Supabase) against
+    start_of_day/end_of_day (naive from datetime.combine). That comparison
+    raises TypeError: can't compare offset-naive and offset-aware datetimes.
+
+    The fix in app/main.py wraps both sides of the comparison in a
+    naive() helper that strips tzinfo. This test verifies the helper
+    exists and behaves correctly. Local SQLite can't reproduce the bug
+    directly because it strips tzinfo on round-trip; production can.
+    """
+    # Importing the helper fails (RED) until the fix is in place.
+    from app.main import naive
+
+    naive_dt = datetime(2026, 7, 15, 10, 0, 0)
+    aware_dt = naive_dt.replace(tzinfo=timezone.utc)
+
+    # naive() on a naive datetime is a no-op
+    assert naive(naive_dt) == naive_dt
+    assert naive(naive_dt).tzinfo is None
+
+    # naive() on an aware datetime strips tzinfo
+    assert naive(aware_dt) == naive_dt
+    assert naive(aware_dt).tzinfo is None
+
+    # The original production crash: comparing aware to naive raises
+    # TypeError. With the helper, the comparison is safe.
+    start_of_day = naive_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = naive_dt.replace(hour=23, minute=59, second=59, microsecond=0)
+    cita_end_aware = aware_dt + timedelta(minutes=60)
+    # No TypeError: both sides normalized via naive()
+    assert not (naive(cita_end_aware) < start_of_day or naive(aware_dt) > end_of_day)
 
 
 # ── REQ-DCO-001: Naive datetime serialization ─────────────────────────────
