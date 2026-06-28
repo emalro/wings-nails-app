@@ -1655,6 +1655,116 @@ def test_appointment_datetime_no_z_suffix():
     assert not fecha_get.endswith("Z"), f"GET response has Z suffix: {fecha_get}"
 
 
+def test_appointment_datetime_aware_input_serializes_naive():
+    """REQ-DCO-004 + REQ-DCO-005: Aware datetimes serialize naive; Z/offset inputs normalized.
+
+    SQLite strips tzinfo on DB read, so the integration path can't reproduce
+    the production (PostgreSQL/Supabase) failure mode. The direct Pydantic
+    model assertions below simulate the aware-datetime path that production
+    would exhibit, and will fail on current code (where Pydantic emits Z
+    suffix) and pass after the fix. The integration smoke tests verify
+    wiring (response_model, endpoint contracts) but don't catch the bug
+    themselves due to SQLite's tzinfo-stripping behavior.
+    """
+    import json
+    from app.models import EstadoCita
+    from app.schemas import CitaRead, ClienteRead, CitaCreate, CitaUpdate
+
+    # Simulate the production aware-UTC datetime path
+    aware_dt = datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc)
+
+    # --- Direct Pydantic model assertions (catch the serializer/validator bug) ---
+
+    # PROD-A: CitaRead.fecha_hora_cita with aware datetime serializes naive
+    cita_read = CitaRead(
+        id=999,
+        id_cliente=1,
+        cliente_nombre="Test",
+        fecha_hora_cita=aware_dt,
+        precio_historico_cobrado=2500.0,
+        sena_historica_pagada=500.0,
+        comprobante_transferencia_url=None,
+        comprobante_verificado_manual=False,
+        monto_recibido_en_caja=0.0,
+        estado_cita=EstadoCita.pendiente,
+        metodo_pago_sena="Transferencia",
+        fecha_registro_cita=aware_dt,
+        duracion_total_minutos=0,
+        servicios=[],
+    )
+    cita_json = cita_read.model_dump_json()
+    cita_dict = json.loads(cita_json)
+    assert cita_dict["fecha_hora_cita"] == "2026-06-29T09:00:00", \
+        f"PROD-A: CitaRead.fecha_hora_cita serialized as {cita_dict['fecha_hora_cita']!r}"
+    assert "Z" not in cita_json, f"PROD-A: CitaRead JSON contains Z: {cita_json[:200]}"
+
+    # PROD-C: ClienteRead.fecha_creacion with aware datetime serializes naive
+    cliente_read = ClienteRead(
+        id=1,
+        nombre="Test",
+        apellido="User",
+        dni="12345678",
+        activo=True,
+        fecha_creacion=aware_dt,
+        cantidad_turnos_tomados=0,
+        cantidad_turnos_abonados=0,
+        cantidad_turnos_cancelados_vencidos=0,
+        telefonos=[],
+    )
+    cliente_json = cliente_read.model_dump_json()
+    cliente_dict = json.loads(cliente_json)
+    assert cliente_dict["fecha_creacion"] == "2026-06-29T09:00:00", \
+        f"PROD-C: ClienteRead.fecha_creacion serialized as {cliente_dict['fecha_creacion']!r}"
+    assert "Z" not in cliente_json, f"PROD-C: ClienteRead JSON contains Z: {cliente_json[:200]}"
+
+    # PROD-D (POST): CitaCreate normalizes aware datetime to naive
+    cita_create = CitaCreate(
+        id_cliente=1,
+        fecha_hora_cita=aware_dt,
+        precio_historico_cobrado=2500.0,
+        sena_historica_pagada=500.0,
+        servicios=[],
+    )
+    assert cita_create.fecha_hora_cita == datetime(2026, 6, 29, 9, 0), \
+        f"PROD-D: CitaCreate did not normalize aware datetime: {cita_create.fecha_hora_cita!r}"
+    assert cita_create.fecha_hora_cita.tzinfo is None, \
+        f"PROD-D: CitaCreate.fecha_hora_cita still has tzinfo: {cita_create.fecha_hora_cita.tzinfo}"
+
+    # PROD-D (PATCH): CitaUpdate also normalizes aware datetime to naive
+    cita_update = CitaUpdate(fecha_hora_cita=aware_dt)
+    assert cita_update.fecha_hora_cita == datetime(2026, 6, 29, 9, 0), \
+        f"PROD-D: CitaUpdate did not normalize aware datetime: {cita_update.fecha_hora_cita!r}"
+    assert cita_update.fecha_hora_cita.tzinfo is None, \
+        f"PROD-D: CitaUpdate.fecha_hora_cita still has tzinfo: {cita_update.fecha_hora_cita.tzinfo}"
+
+    # PROD-E (negative): direct CitaRead JSON contains no Z or +00:00
+    assert "Z" not in cita_json, "PROD-E: CitaRead JSON contains Z"
+    assert "+00:00" not in cita_json, "PROD-E: CitaRead JSON contains +00:00"
+    assert "Z" not in cliente_json, "PROD-E: ClienteRead JSON contains Z"
+    assert "+00:00" not in cliente_json, "PROD-E: ClienteRead JSON contains +00:00"
+
+    # --- Integration smoke tests (verify wiring, not bug reproduction) ---
+
+    client_id, service_id, _ = _new_test_client_service()
+
+    # Smoke: busy_slots endpoint returns valid response
+    r = client.get("/busy_slots", params={"date_str": "2026-06-29"})
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+    # Smoke: POST with Z suffix succeeds (validates input, not the bug)
+    payload = {
+        "id_cliente": client_id,
+        "fecha_hora_cita": "2026-06-29T10:00:00Z",
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "servicios": [{"servicio_id": service_id, "duracion_minutos": 60,
+                       "precio_unitario": 2500.0, "subtotal": 2500.0}],
+    }
+    r = client.post("/appointments", json=payload)
+    assert r.status_code == 200
+
+
 def test_appointment_datetime_preserves_naive_input():
     """REQ-DCO-002: Frontend sends naive datetime, backend stores it unchanged."""
     client_id, service_id, _ = _new_test_client_service()
