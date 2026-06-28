@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { formatDate, formatTime } from '../lib/datetime'
 import {
   useClientsList,
   useClient,
@@ -24,14 +25,7 @@ function getPrimaryPhone(client: ClienteRead): string {
 }
 
 function formatAppointmentDate(iso: string): { fecha: string; hora: string } {
-  const d = new Date(iso)
-  const fecha = d.toLocaleDateString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  })
-  const hora = d.toLocaleTimeString('es-AR', {
-    hour: '2-digit', minute: '2-digit',
-  })
-  return { fecha, hora }
+  return { fecha: formatDate(iso), hora: formatTime(iso) }
 }
 
 function statusClass(estado: string): string {

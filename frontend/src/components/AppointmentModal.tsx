@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { getStatusColor, getStatusVar } from '../lib/statusColors'
+import { formatDate, formatTime } from '../lib/datetime'
 
 interface AppointmentService {
   servicio_id: number
@@ -189,11 +190,11 @@ export default function AppointmentModal({ cita, onClose, onSave, onMarkAttended
               <p className="my-1"><strong>Teléfono:</strong> {cita.id_cliente}</p>
               <p className="my-1">
                 <strong>Fecha:</strong>{' '}
-                {cita.fecha_hora_cita.split('T')[0].split('-').reverse().join('/')}
+                {formatDate(cita.fecha_hora_cita)}
               </p>
               <p className="my-1">
                 <strong>Horario:</strong>{' '}
-                {cita.fecha_hora_cita.split('T')[1]?.substring(0, 5) || '--:--'}
+                {formatTime(cita.fecha_hora_cita) || '--:--'}
               </p>
               <p className="my-1">
                 <strong>Duración:</strong> {cita.duracion_total_minutos} min
