@@ -236,6 +236,38 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
     )
   }
 
+  // "Local cerrado" must be checked BEFORE the "no appointments" branch so
+  // the admin sees a clear "cerrado" message instead of "sin turnos". The
+  // calendar itself is hidden in this case (it would render with bogus
+  // min/max bounds because apertura/cierre are null), but the Toolbar is
+  // kept so the admin can still navigate to a different day.
+  const isCerrado = effectiveHours?.abierto === false
+
+  if (isCerrado) {
+    return (
+      <div>
+        <Toolbar
+          view={view}
+          onViewChange={setView}
+          onToday={goToToday}
+          onBack={goBack}
+          onForward={goForward}
+          periodLabel={periodLabel}
+        />
+        <div
+          className="text-center py-10 px-6 mt-4 border border-[var(--border)] rounded-lg mx-auto max-w-md"
+          role="status"
+          aria-live="polite"
+          data-testid="calendar-cerrado-message"
+        >
+          <p className="text-base font-semibold text-[var(--text-primary)]">
+            🔒 Local cerrado en este día
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (appointments.length === 0) {
     return (
       <div>
