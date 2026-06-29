@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { HoneypotField } from './HoneypotField'
+import HoneypotField from './HoneypotField'
 
 describe('HoneypotField', () => {
   it('renders a hidden text input with the right DOM attributes (D7)', () => {

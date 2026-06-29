@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 28/06/2026
+> Última actualización: 29/06/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -263,6 +263,33 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **SDD**: `openspec/changes/deposit-front-alert/`
 - **Motivo**: UX de error. La violación `seña > precio` es una regla de negocio que la manicurista necesita entender de un vistazo; el fallback genérico la ocultaba detrás de `[object Object]`. El anti-typo guard blinda el contrato frontend-backend contra "typo fix" futuros que rompan el match en silencio. S-1 y S-2 cierran gaps del verify-report de la fix previa de timezone.
 - **Impacto esperado**: Mensajes de error específicos (servicio vs turno) en lugar de `[object Object]` en 4 superficies. 114 tests backend pasando (era 111). 6 tests Vitest nuevos. `npx tsc --noEmit` limpio. Sin migraciones de DB, sin schema drift. Revert restaura el `||` fallback previo sin side effects.
+
+---
+
+### 2026-06-29 — Public Booking Endpoints (REQ-PUB-001..010)
+
+- **Tipo**: Nueva funcionalidad (SDD: public-booking)
+- **Descripción**: Cierra el gap de arquitectura que rompía `/reservar`: el frontend llamaba `POST /clients` y `POST /appointments` como visitante no autenticado, pero ambos requieren `Depends(get_current_user)` — cada submit retornaba 401 y la reserva se perdía silenciosamente. Esta entrega agrega 2 endpoints nuevos `POST /public/clients` y `POST /public/appointments` con throttling T2 (honeypot + per-DNI 3/day + per-IP 10/min), respuesta minimal-info `{id, was_existing}` (sin PII), y audit log estructurado. Las rutas admin (`/clients`, `/appointments`) quedan intactas y auth-gated.
+- **Archivos**:
+  - `backend/app/schemas.py` (modificado, +77) — `PublicClientLookupRequest/Response`, `PublicCitaServicioCreate`, `PublicAppointmentCreate/Response` con `extra="forbid"` (rechaza `id_cliente` y `estado_cita` del body), reuse de `normalize_phone` y patrón `sena_excede_precio`.
+  - `backend/app/main.py` (modificado, +284) — 2 endpoints + 2 async deps (`parse_public_client_payload`, `parse_public_appointment_payload`) + `get_dni_key` (slowapi key_func per-DNI) + `log_public_booking` helper + `IntegrityError` import. El pre-check de DNI desactivado evita que el UNIQUE constraint en `cliente.dni` se dispare cuando un registro desactivado bloquea el INSERT (D5 + REQ-PUB-008).
+  - `backend/tests/test_api.py` (modificado, +488) — 25 tests nuevos: 6 schema-direct, 5 `/public/clients`, 7 `/public/appointments`, 7 edge (race, per-IP 429, per-DNI 429, audit log success/honeypot en ambas rutas). Re-introducido `@pytest.fixture(autouse=True) def _reset_rate_limiter()` (patrón B-8 reverted) para que el cap per-IP no acumule 429 espurios entre tests.
+  - `frontend/src/components/HoneypotField.tsx` (nuevo, +52) — input off-screen con `name="website"` (DOM) vs `honeypot` (JSON key) según D7; aria-hidden, tabindex=-1, autocomplete=off.
+  - `frontend/src/components/HoneypotField.test.tsx` (nuevo, +28) — 2 casos vitest (atributos DOM + posición off-screen ≠ display:none).
+  - `frontend/src/api.ts` (modificado, +62) — tipos `PublicClientLookupRequest/Response`, `PublicCitaServicioCreate`, `PublicAppointmentCreate/Response` + funciones `lookupOrCreatePublicClient` y `createPublicAppointment`.
+  - `frontend/src/pages/Reservar.tsx` (modificado) — `handleConfirm` ahora usa las nuevas funciones; `id_cliente` removido del payload; `honeypot: ''` agregado a ambos; `<HoneypotField/>` embebido en form JSX; `buildWhatsAppUrl` deriva `cliente_nombre` de `form.values` (la respuesta minimal del backend ya no lo incluye).
+  - `openspec/changes/public-booking/` (nuevo) — 4 design docs (proposal, spec, design, tasks).
+- **Requisitos**: REQ-PUB-001..010 (lookup-or-create, hardcoded Pendiente, extra=forbid, honeypot silent 200, per-DNI 3/day, per-IP 10/min, deactivated → 404, audit log, race resolution).
+- **SDD**: `openspec/changes/public-booking/`
+- **Motivo**: `/reservar` era la superficie de booking del salón y estaba rota en producción (silent 401). El design intent previo B-8 (`f2a86b6`) intentó hacer `/clients` y `/appointments` públicos, pero rompía la separación admin/public; revertido en `b02ce05`. Esta entrega crea rutas dedicadas con throttling dedicado y preserva los admin paths.
+- **Riesgos conocidos**:
+  - R2 (R2 del design): el rate-limit de slowapi es in-memory, se resetea en cada restart de Render. Aceptable para el volumen low-tenant.
+  - R3 del design: el test de race usa sequential session simulation (más determinista que threading); el branch de IntegrityError está cubierto.
+  - Race real solo ocurre bajo concurrencia simultánea con el mismo DNI; en la práctica el cap per-DNI 3/day hace que el escenario sea muy raro.
+- **Desviaciones del design original**:
+  - REQ-PUB-005 original pedía 422 con `PydanticCustomError`; resuelto como silent 200 con audit log (`outcome="honeypot"`) para que el bot no reciba señal (O1). El test `test_public_booking_audit_log_honeypot` blinda el nuevo contrato.
+  - El ejemplo `public_lookup_or_create_client` del design.md usaba `status_code=201` como default del route; el branch hit ahora retorna 200 vía `response: Response` injection (REQ-PUB-001 scenario).
+- **Impacto esperado**: `/reservar` funciona end-to-end para visitantes no autenticados. 139 tests backend pasando (era 114, +25 nuevos). 19 tests vitest pasando (era 17, +2 nuevos). `npx tsc --noEmit` limpio. Sin migraciones de DB. Revert restaura el comportamiento anterior (silent 401) sin side effects.
 
 ---
 

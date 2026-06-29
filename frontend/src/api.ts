@@ -418,3 +418,60 @@ export async function getClientAppointments(id: number): Promise<CitaRead[]> {
   const r = await api.get(`/clients/${id}/appointments`)
   return r.data
 }
+
+// ── Public Booking (unauthenticated) ────────────────────────────────────
+// Used by /reservar for logged-out visitors. The honeypot field is sent
+// as an empty string for legitimate visitors; spam-bots that fill every
+// DOM input will send a non-empty value and the server returns a silent
+// 200 with no DB write (D2, REQ-PUB-005). The frontend treats the silent
+// 200 as a real success — it cannot and should not distinguish.
+
+export type PublicClientLookupRequest = {
+  dni: string
+  nombre: string
+  apellido: string
+  telefono: string
+  email?: string | null
+  honeypot: string
+}
+
+export type PublicClientLookupResponse = {
+  id: number
+  was_existing: boolean
+}
+
+export type PublicCitaServicioCreate = {
+  servicio_id: number
+  duracion_minutos: number
+  precio_unitario: number
+  subtotal: number
+}
+
+export type PublicAppointmentCreate = {
+  dni: string
+  servicios: PublicCitaServicioCreate[]
+  fecha_hora_cita: string
+  precio_historico_cobrado: number
+  sena_historica_pagada: number
+  honeypot: string
+}
+
+export type PublicAppointmentResponse = {
+  id: number
+  fecha_hora_cita: string
+  estado_cita: string
+}
+
+export async function lookupOrCreatePublicClient(
+  payload: PublicClientLookupRequest,
+): Promise<PublicClientLookupResponse> {
+  const r = await api.post('/public/clients', payload)
+  return r.data
+}
+
+export async function createPublicAppointment(
+  payload: PublicAppointmentCreate,
+): Promise<PublicAppointmentResponse> {
+  const r = await api.post('/public/appointments', payload)
+  return r.data
+}

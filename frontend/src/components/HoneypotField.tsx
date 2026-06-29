@@ -24,7 +24,7 @@ import React from 'react'
  * off-screen absolute pattern keeps the field in the rendered tree
  * (so a naive bot submits it) but visually hides it.
  */
-export function HoneypotField() {
+function HoneypotField() {
   return (
     <input
       type="text"
@@ -50,3 +50,5 @@ export function HoneypotField() {
     />
   )
 }
+
+export default HoneypotField
