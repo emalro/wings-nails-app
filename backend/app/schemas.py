@@ -322,3 +322,80 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     user: UserRead
+
+
+# ── Public booking schemas (REQ-PUB-001..005) ─────────────────────────────
+# Used by the unauthenticated POST /public/clients and POST /public/appointments
+# endpoints. extra="forbid" is critical: a public caller must NOT be able to
+# sneak in `id_cliente` (REQ-PUB-003) or `estado_cita` (REQ-PUB-004).
+# The `honeypot` field is declared here for documentation but has NO validator
+# (D2): the route is responsible for the silent-200 check so the response
+# shape is identical to a real success and gives the bot no signal.
+
+class PublicClientLookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dni: str = Field(min_length=7, max_length=8, pattern=r"^\d+$")
+    nombre: str = Field(min_length=1, max_length=100)
+    apellido: str = Field(min_length=1, max_length=100)
+    telefono: str
+    email: Optional[str] = Field(default=None, max_length=200)
+    # No validator — silent-200 is a route concern (design D2).
+    honeypot: str = Field(default="", max_length=500)
+
+    @field_validator("telefono")
+    @classmethod
+    def _normalize_telefono(cls, v: str) -> str:
+        # Reuse the canonical digits-only normalizer (REQ-PUB-001: phone >=7 digits).
+        digits = normalize_phone(v)
+        if len(digits) < 7:
+            raise ValueError("Teléfono: debe tener al menos 7 dígitos")
+        return digits
+
+
+class PublicClientLookupResponse(BaseModel):
+    id: int
+    was_existing: bool
+
+
+class PublicCitaServicioCreate(BaseModel):
+    servicio_id: int
+    duracion_minutos: int = Field(gt=0)
+    precio_unitario: float = Field(ge=0)
+    subtotal: float = Field(ge=0)
+
+
+class PublicAppointmentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dni: str = Field(min_length=7, max_length=8, pattern=r"^\d+$")
+    servicios: List["PublicCitaServicioCreate"] = Field(min_length=1)
+    fecha_hora_cita: datetime
+    precio_historico_cobrado: float = Field(ge=0)
+    sena_historica_pagada: float = Field(ge=0)
+    # No validator — silent-200 is a route concern (design D2).
+    honeypot: str = Field(default="", max_length=500)
+
+    @field_validator("fecha_hora_cita", mode="after")
+    @classmethod
+    def _accept_naive_or_aware(cls, v: datetime) -> datetime:
+        # REQ-DCO-005: normalize aware → naive so the value round-trips
+        # through SQLite/PostgreSQL without tzinfo drift.
+        return v.replace(tzinfo=None) if v.tzinfo else v
+
+    @model_validator(mode="after")
+    def check_sena_no_supera_precio(self):
+        # REQ-DVA-001: sena must not exceed precio. Literal error type
+        # `sena_excede_precio` (no ñ) — locked by test_post_appointments
+        # _with_sena_mayor_returns_422_with_literal_type_sena.
+        if self.sena_historica_pagada > self.precio_historico_cobrado:
+            raise PydanticCustomError(
+                "sena_excede_precio",
+                "La seña ({sena}) no puede superar el precio de la cita ({precio})",
+                {"sena": self.sena_historica_pagada, "precio": self.precio_historico_cobrado},
+            )
+        return self
+
+
+class PublicAppointmentResponse(BaseModel):
+    id: int
+    fecha_hora_cita: datetime
+    estado_cita: EstadoCita  # always "Pendiente" — hardcoded by the route (REQ-PUB-004)

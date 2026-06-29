@@ -1,5 +1,6 @@
 import os
 import sys
+import pytest
 from datetime import datetime, timedelta, timezone
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -2435,3 +2436,154 @@ def test_post_appointments_with_sena_mayor_returns_422_with_literal_type_sena():
         f"REQ-DVA-003 (appointments): expected literal 'sena_excede_precio' (no ñ), "
         f"got {detail[0]['type']!r}"
     )
+
+
+# ── PUBLIC BOOKING: Pydantic schemas (REQ-PUB-001..005) ─────────────────
+# RED: these tests pin the contract for the 4 new schemas in
+# backend/app/schemas.py. They are direct-Pydantic assertions (not
+# HTTP-driven) because the schemas must be correct regardless of the
+# transport layer.
+
+def test_public_client_request_rejects_id_cliente():
+    """REQ-PUB-003: PublicClientLookupRequest rejects `id_cliente` (extra='forbid')."""
+    from pydantic import ValidationError
+    from app.schemas import PublicClientLookupRequest
+
+    with pytest.raises(ValidationError) as exc_info:
+        PublicClientLookupRequest.model_validate({
+            "dni": "12345678",
+            "nombre": "Ana",
+            "apellido": "Lopez",
+            "telefono": "1234567890",
+            "honeypot": "",
+            "id_cliente": 999,  # NOT allowed in public request
+        })
+    errors = exc_info.value.errors()
+    assert any("id_cliente" in str(e.get("loc", "")) for e in errors), \
+        f"Expected id_cliente in errors, got: {errors}"
+
+
+def test_public_appointment_request_rejects_id_cliente():
+    """REQ-PUB-003: PublicAppointmentCreate rejects `id_cliente` (extra='forbid')."""
+    from pydantic import ValidationError
+    from app.schemas import PublicAppointmentCreate
+
+    with pytest.raises(ValidationError) as exc_info:
+        PublicAppointmentCreate.model_validate({
+            "dni": "12345678",
+            "fecha_hora_cita": "2026-07-15T14:00:00",
+            "precio_historico_cobrado": 2500.0,
+            "sena_historica_pagada": 500.0,
+            "honeypot": "",
+            "servicios": [
+                {"servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0}
+            ],
+            "id_cliente": 999,  # NOT allowed in public request
+        })
+    errors = exc_info.value.errors()
+    assert any("id_cliente" in str(e.get("loc", "")) for e in errors), \
+        f"Expected id_cliente in errors, got: {errors}"
+
+
+def test_public_appointment_request_rejects_estado_cita():
+    """REQ-PUB-004: PublicAppointmentCreate rejects `estado_cita` (extra='forbid')."""
+    from pydantic import ValidationError
+    from app.schemas import PublicAppointmentCreate
+
+    with pytest.raises(ValidationError) as exc_info:
+        PublicAppointmentCreate.model_validate({
+            "dni": "12345678",
+            "fecha_hora_cita": "2026-07-15T14:00:00",
+            "precio_historico_cobrado": 2500.0,
+            "sena_historica_pagada": 500.0,
+            "honeypot": "",
+            "servicios": [
+                {"servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0}
+            ],
+            "estado_cita": "Asistido",  # NOT allowed — must be hardcoded Pendiente
+        })
+    errors = exc_info.value.errors()
+    assert any("estado_cita" in str(e.get("loc", "")) for e in errors), \
+        f"Expected estado_cita in errors, got: {errors}"
+
+
+def test_public_client_dni_pattern():
+    """PublicClientLookupRequest requires 7-8 digit DNI (digits only)."""
+    from pydantic import ValidationError
+    from app.schemas import PublicClientLookupRequest
+
+    # Too short (6 digits)
+    with pytest.raises(ValidationError):
+        PublicClientLookupRequest.model_validate({
+            "dni": "123456",
+            "nombre": "Ana",
+            "apellido": "Lopez",
+            "telefono": "1234567890",
+            "honeypot": "",
+        })
+
+    # Non-digit
+    with pytest.raises(ValidationError):
+        PublicClientLookupRequest.model_validate({
+            "dni": "1234abcd",
+            "nombre": "Ana",
+            "apellido": "Lopez",
+            "telefono": "1234567890",
+            "honeypot": "",
+        })
+
+    # Valid 7-8 digits
+    m7 = PublicClientLookupRequest.model_validate({
+        "dni": "1234567",
+        "nombre": "Ana",
+        "apellido": "Lopez",
+        "telefono": "1234567890",
+        "honeypot": "",
+    })
+    assert m7.dni == "1234567"
+    m8 = PublicClientLookupRequest.model_validate({
+        "dni": "12345678",
+        "nombre": "Ana",
+        "apellido": "Lopez",
+        "telefono": "1234567890",
+        "honeypot": "",
+    })
+    assert m8.dni == "12345678"
+
+
+def test_public_client_phone_too_short_rejected():
+    """PublicClientLookupRequest rejects phone with <7 digits after normalize."""
+    from pydantic import ValidationError
+    from app.schemas import PublicClientLookupRequest
+
+    with pytest.raises(ValidationError):
+        PublicClientLookupRequest.model_validate({
+            "dni": "12345678",
+            "nombre": "Ana",
+            "apellido": "Lopez",
+            "telefono": "12345",  # only 5 digits
+            "honeypot": "",
+        })
+
+
+def test_public_appointment_sena_excede_precio_rejected():
+    """REQ-PUB-002 + REQ-DVA-001: PublicAppointmentCreate rejects sena > precio."""
+    from pydantic_core import PydanticCustomError
+    from app.schemas import PublicAppointmentCreate
+
+    # Pydantic v2 raises ValidationError wrapping a PydanticCustomError
+    with pytest.raises(ValidationError) if False else pytest.raises(Exception) as exc_info:
+        PublicAppointmentCreate.model_validate({
+            "dni": "12345678",
+            "fecha_hora_cita": "2026-07-15T14:00:00",
+            "precio_historico_cobrado": 1000.0,
+            "sena_historica_pagada": 2500.0,  # sena > precio → reject
+            "honeypot": "",
+            "servicios": [
+                {"servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 1000.0, "subtotal": 1000.0}
+            ],
+        })
+    # Walk the error chain to find the PydanticCustomError with type "sena_excede_precio"
+    err_str = str(exc_info.value)
+    assert "sena_excede_precio" in err_str, \
+        f"Expected 'sena_excede_precio' error type, got: {err_str}"
