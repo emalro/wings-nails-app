@@ -1,14 +1,14 @@
 # Public Booking
 
 **Domain**: `public-booking`
-**Change**: `public-booking`
-**Status**: Draft (new domain)
+**Status**: Active (new)
+**Source change**: `public-booking` (archived 2026-06-29)
 
 ---
 
 ## Context
 
-This delta establishes the public booking entry point for unauthenticated visitors. The previous flow was non-functional: `Reservar.tsx` calls `POST /clients` and `POST /appointments` as a logged-out visitor, but both require `Depends(get_current_user)` — every submit returned 401 and the booking was silently lost. Judgment-day review (engram #241, #244) deferred the quick-win attempt to a dedicated SDD change.
+This domain establishes the public booking entry point for unauthenticated visitors. The previous flow was non-functional: `Reservar.tsx` calls `POST /clients` and `POST /appointments` as a logged-out visitor, but both require `Depends(get_current_user)` — every submit returned 401 and the booking was silently lost. Judgment-day review (engram #241, #244) deferred the quick-win attempt to a dedicated SDD change.
 
 This change adds **two new endpoints** — `POST /public/clients` and `POST /public/appointments` — with throttling posture T2 (honeypot + per-DNI 3/day + per-IP 10/min). Admin paths are untouched. The new endpoints give the existing 4-step flow a working backend, satisfying `online-booking` REQ-BKG-002 and REQ-BKG-004 (UX spec; no public-path contract existed before).
 
@@ -16,7 +16,7 @@ The new endpoints honor prior specs as-is (no MODIFIED blocks needed): `online-b
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### REQ-PUB-001 — `POST /public/clients` lookup-or-create by DNI (MUST)
 
