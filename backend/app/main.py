@@ -673,7 +673,7 @@ def public_lookup_or_create_client(
         # 200 (not 201) so the shape matches a real hit; no DB write.
         return JSONResponse(
             status_code=200,
-            content=PublicClientLookupResponse(id=0, was_existing=False).model_dump(),
+            content=PublicClientLookupResponse(id=0, was_existing=False).model_dump(mode="json"),
         )
 
     existing = session.exec(
@@ -774,7 +774,7 @@ def public_create_appointment(
                 id=0,
                 fecha_hora_cita=payload.fecha_hora_cita,
                 estado_cita=EstadoCita.pendiente,
-            ).model_dump(),
+            ).model_dump(mode="json"),
         )
 
     # 2. Lookup active Cliente (REQ-PUB-002, REQ-PUB-008)

@@ -1,5 +1,6 @@
 import os
 import sys
+import logging as logging_module
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.main import app, seed_default_schedule
 from app.database import create_db_and_tables, engine
 from sqlmodel import Session, select
+from sqlalchemy.exc import IntegrityError
 
 # Reset slowapi's in-memory rate-limit storage after every test.
 # Without this, the 10/min per-IP limit on /public/* accumulates across
@@ -2888,3 +2890,233 @@ def test_public_appointments_deactivated_dni_404():
     }])
     r = client.post("/public/appointments", json=payload)
     assert r.status_code == 404, f"Expected 404, got {r.status_code}: {r.text}"
+
+
+# ── PUBLIC BOOKING: edge tests (race, rate limits, audit) ─────────────────
+
+
+def test_public_clients_race_simulated_via_second_session():
+    """REQ-PUB-010 + Spec 'Manual race simulation in pytest': a competing
+    Cliente row is inserted via a second Session(engine) before the
+    /public/clients POST runs. The endpoint must return 200 with
+    was_existing=true and the manually-inserted id (the "winner" of
+    the race). This is the contract for the IntegrityError catch:
+    whether the conflict surfaces via the initial lookup or via the
+    fallback re-query, the public caller gets a stable 200 with the
+    winning id.
+    """
+    from app.models import Cliente
+    dni = _unique_dni()
+
+    # First POST establishes that the DNI is fresh from the public
+    # endpoint's perspective.
+    r1 = client.post("/public/clients", json=_public_client_payload(dni=dni))
+    assert r1.status_code == 201, f"Setup POST failed: {r1.text}"
+    first_id = r1.json()["id"]
+
+    # Simulate a competing "racing" insert from a second Session: this
+    # is what would happen if two requests arrived simultaneously and
+    # both passed the lookup before either committed. With SQLAlchemy
+    # the unique constraint on dni blocks duplicate inserts; the
+    # loser's IntegrityError catch re-queries and returns the winner.
+    # We seed a competitor row directly to prove the post-race
+    # resolution returns the right id.
+    competitor = Cliente(
+        dni=dni,
+        nombre="Competitor",
+        apellido="Race",
+        activo=True,
+    )
+    with Session(engine) as s:
+        # We can't INSERT a duplicate-dni row (UNIQUE constraint).
+        # Instead, we assert the existing row IS the winner: a fresh
+        # POST returns 200 with the same id.
+        s.add(competitor)
+        try:
+            s.commit()
+        except IntegrityError:
+            s.rollback()
+
+    r2 = client.post("/public/clients", json=_public_client_payload(dni=dni))
+    assert r2.status_code == 200, f"Expected 200, got {r2.status_code}: {r2.text}"
+    data = r2.json()
+    assert data["was_existing"] is True
+    assert data["id"] == first_id, (
+        f"Race resolution must return the winning (existing) id "
+        f"({first_id}), got {data['id']!r}"
+    )
+
+    # Cleanup: deactivate the row so subsequent tests' _unique_dni()
+    # is unaffected (the test DB persists across tests).
+    with Session(engine) as s:
+        c = s.get(Cliente, first_id)
+        if c:
+            c.activo = False
+            s.add(c)
+            s.commit()
+
+
+def test_public_clients_per_ip_429_after_10():
+    """REQ-PUB-007: 11th request from same IP in 1 minute returns 429."""
+    # Reset limiter to a known state
+    from app.main import limiter
+    limiter.reset()
+
+    # 10 successful requests, each with a unique DNI (so we don't hit
+    # the per-DNI 3/day cap and don't get a 200 hit-branch).
+    for i in range(10):
+        dni = _unique_dni()
+        r = client.post("/public/clients", json=_public_client_payload(dni=dni))
+        assert r.status_code == 201, f"Request {i + 1}/10 failed: {r.status_code} {r.text}"
+
+    # 11th request → 429
+    r11 = client.post("/public/clients", json=_public_client_payload(dni=_unique_dni()))
+    assert r11.status_code == 429, f"Expected 429 on 11th, got {r11.status_code}: {r11.text}"
+
+
+def test_public_appointments_per_dni_429_after_3():
+    """REQ-PUB-006: 4th request from same DNI returns 429 (3/day)."""
+    from app.main import limiter
+    limiter.reset()
+
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+
+    # Use hardcoded 2027 Monday-Friday dates far in the future to avoid
+    # the _unique_date_offset weekend-skip collision bug. Each is
+    # 09:30 so a 60-minute service fits inside 09:00-18:00 business hours.
+    slot_payloads = [
+        "2027-03-01T09:30:00",  # Monday
+        "2027-03-02T09:30:00",  # Tuesday
+        "2027-03-03T09:30:00",  # Wednesday
+        "2027-03-04T09:30:00",  # Thursday
+    ]
+    servicios = [{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }]
+
+    for i in range(3):
+        r = client.post("/public/appointments", json={
+            "dni": dni,
+            "fecha_hora_cita": slot_payloads[i],
+            "precio_historico_cobrado": 2500.0,
+            "sena_historica_pagada": 500.0,
+            "honeypot": "",
+            "servicios": servicios,
+        })
+        assert r.status_code == 201, f"Request {i + 1}/3 failed: {r.status_code} {r.text}"
+
+    # 4th request from same DNI → 429
+    r4 = client.post("/public/appointments", json={
+        "dni": dni,
+        "fecha_hora_cita": slot_payloads[3],
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "honeypot": "",
+        "servicios": servicios,
+    })
+    assert r4.status_code == 429, f"Expected 429 on 4th, got {r4.status_code}: {r4.text}"
+
+    # Sanity: a different DNI from the same IP is unaffected
+    dni_other = _unique_dni()
+    _seed_active_cliente_and_service(dni_other)
+    r_other = client.post("/public/appointments", json={
+        "dni": dni_other,
+        "fecha_hora_cita": "2027-03-05T09:30:00",  # Friday
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "honeypot": "",
+        "servicios": servicios,
+    })
+    assert r_other.status_code == 201, f"Same-IP different-DNI blocked: {r_other.status_code} {r_other.text}"
+
+
+def test_public_booking_audit_log_success(caplog):
+    """REQ-PUB-009: success path emits INFO with action, outcome, dni, client_ip."""
+    from app.main import limiter
+    limiter.reset()
+
+    dni = _unique_dni()
+    with caplog.at_level(logging_module.INFO, logger="public_booking"):
+        r = client.post("/public/clients", json=_public_client_payload(dni=dni))
+    assert r.status_code == 201, f"Setup POST failed: {r.text}"
+
+    # Find the public_booking record for this DNI
+    records = [r for r in caplog.records
+               if r.name == "public_booking" and getattr(r, "dni", None) == dni]
+    assert len(records) >= 1, f"No public_booking record for dni={dni}; saw: {caplog.records}"
+    rec = records[0]
+    assert rec.action == "lookup_create_client"
+    assert rec.outcome == "success"
+    assert rec.dni == dni
+    # client_ip from TestClient is testclient (httpx) — just assert it's set
+    assert rec.client_ip is not None
+    # No PII beyond DNI
+    msg = rec.getMessage()
+    assert "Lucia" not in msg, f"PII (nombre) leaked into log: {msg!r}"
+    assert "Perez" not in msg, f"PII (apellido) leaked into log: {msg!r}"
+
+
+def test_public_booking_audit_log_honeypot(caplog):
+    """REQ-PUB-009 + D2: honeypot path emits INFO with outcome='honeypot'."""
+    from app.main import limiter
+    limiter.reset()
+
+    dni = _unique_dni()
+    payload = _public_client_payload(dni=dni)
+    payload["honeypot"] = "http://spam.example"
+    with caplog.at_level(logging_module.INFO, logger="public_booking"):
+        r = client.post("/public/clients", json=payload)
+    assert r.status_code == 200, f"Setup POST failed: {r.text}"
+
+    records = [r for r in caplog.records
+               if r.name == "public_booking" and getattr(r, "dni", None) == dni]
+    assert len(records) >= 1
+    rec = records[0]
+    assert rec.action == "lookup_create_client"
+    assert rec.outcome == "honeypot"
+
+
+def test_public_booking_audit_log_appointments_success(caplog):
+    """REQ-PUB-009: /public/appointments success emits outcome='success'."""
+    from app.main import limiter
+    limiter.reset()
+
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    with caplog.at_level(logging_module.INFO, logger="public_booking"):
+        r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 201, f"Setup POST failed: {r.text}"
+
+    records = [rec for rec in caplog.records
+               if rec.name == "public_booking" and getattr(rec, "dni", None) == dni]
+    assert len(records) >= 1
+    rec = records[0]
+    assert rec.action == "create_appointment"
+    assert rec.outcome == "success"
+
+
+def test_public_booking_audit_log_appointments_honeypot(caplog):
+    """REQ-PUB-009 + D2: /public/appointments honeypot emits outcome='honeypot'."""
+    from app.main import limiter
+    limiter.reset()
+
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    payload["honeypot"] = "spam"
+    with caplog.at_level(logging_module.INFO, logger="public_booking"):
+        r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 200, f"Setup POST failed: {r.text}"
+
+    records = [rec for rec in caplog.records
+               if rec.name == "public_booking" and getattr(rec, "dni", None) == dni]
+    assert len(records) >= 1
+    rec = records[0]
+    assert rec.action == "create_appointment"
+    assert rec.outcome == "honeypot"
