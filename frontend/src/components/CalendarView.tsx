@@ -6,6 +6,7 @@ import 'react-big-calendar/lib/css/react-big-calendar.css'
 import { useEffectiveHours } from '../hooks'
 import { getStatusColor, getStatusVar } from '../lib/statusColors'
 import { parseLocalISODateTime } from '../lib/datetime'
+import { getPeriodLabel } from '../lib/calendarLabels'
 
 interface AppointmentService {
   servicio_id: number
@@ -160,6 +161,8 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
       ))
     : cierreTime
 
+  const periodLabel = React.useMemo(() => getPeriodLabel(view, date), [view, date])
+
   const events: CalendarEvent[] = appointments.map((cita) => {
     // REQ-DCO-001/003: parse naive ISO datetime as local Argentina time.
     // parseLocalISODateTime encodes the contract — no UTC conversion.
@@ -236,7 +239,14 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
   if (appointments.length === 0) {
     return (
       <div>
-        <Toolbar view={view} onViewChange={setView} onToday={goToToday} onBack={goBack} onForward={goForward} />
+        <Toolbar
+          view={view}
+          onViewChange={setView}
+          onToday={goToToday}
+          onBack={goBack}
+          onForward={goForward}
+          periodLabel={periodLabel}
+        />
         <div className="text-center py-12 text-[var(--text-secondary)]">
           Sin turnos registrados
         </div>
@@ -246,7 +256,14 @@ export default function CalendarView({ appointments, loading, onEventClick }: Ca
 
   return (
     <div>
-      <Toolbar view={view} onViewChange={setView} onToday={goToToday} onBack={goBack} onForward={goForward} />
+      <Toolbar
+        view={view}
+        onViewChange={setView}
+        onToday={goToToday}
+        onBack={goBack}
+        onForward={goForward}
+        periodLabel={periodLabel}
+      />
       <Calendar<CalendarEvent>
         localizer={localizer}
         events={events}
@@ -278,27 +295,39 @@ interface ToolbarProps {
   onToday: () => void
   onBack: () => void
   onForward: () => void
+  periodLabel: string
 }
 
-function Toolbar({ view, onViewChange, onToday, onBack, onForward }: ToolbarProps) {
+function Toolbar({ view, onViewChange, onToday, onBack, onForward, periodLabel }: ToolbarProps) {
   const views = [
     { key: Views.DAY, label: 'Día' },
     { key: Views.WEEK, label: 'Semana' },
     { key: Views.MONTH, label: 'Mes' },
+    { key: Views.AGENDA, label: 'Agenda' },
   ]
 
   return (
     <div className="flex gap-2 mb-3 flex-wrap items-center">
-      <button type="button" onClick={onBack} className="btn-toolbar">&larr;</button>
-      <button type="button" onClick={onToday} className="btn-toolbar">Hoy</button>
-      <button type="button" onClick={onForward} className="btn-toolbar">&rarr;</button>
-      <div className="ml-auto flex gap-1">
+      <button type="button" onClick={onBack} className="btn-toolbar" aria-label="Período anterior">&larr;</button>
+      <button type="button" onClick={onToday} className="btn-toolbar" aria-label="Ir a hoy">Hoy</button>
+      <button type="button" onClick={onForward} className="btn-toolbar" aria-label="Período siguiente">&rarr;</button>
+      <h3
+        className="text-lg font-semibold text-[var(--text-primary)] ml-3"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="calendar-period-label"
+      >
+        {periodLabel}
+      </h3>
+      <div className="ml-auto flex gap-1" role="group" aria-label="Selector de vista del calendario">
         {views.map((v) => (
           <button
             key={v.key}
             type="button"
             onClick={() => onViewChange(v.key)}
             className={`btn-toolbar ${view === v.key ? 'bg-[var(--primary)] text-white font-semibold' : ''}`}
+            aria-label={`Ver ${v.label.toLowerCase()}`}
+            aria-pressed={view === v.key}
           >
             {v.label}
           </button>
