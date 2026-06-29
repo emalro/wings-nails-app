@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useServices, useBusySlots, useCreateClient, useCreateAppointment, useConfig } from '../hooks'
+import { useServices, useBusySlots, useConfig } from '../hooks'
 import { useFormValidation } from '../hooks/useFormValidation'
 import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
 import { getApiError } from '../lib/apiErrors'
@@ -7,17 +7,24 @@ import { normalizePhone } from '../lib/phone'
 import FieldError from '../components/FieldError'
 import Calendar from '../components/Calendar'
 import CopyButton from '../components/CopyButton'
-import type { ConfigType, Servicio } from '../api'
+import HoneypotField from '../components/HoneypotField'
+import {
+  lookupOrCreatePublicClient,
+  createPublicAppointment,
+  type ConfigType,
+  type Servicio,
+} from '../api'
 
 type Step = 'service' | 'form' | 'confirm' | 'payment'
 
+// REQ-PUB-002: /public/appointments returns minimal info
+// ({id, fecha_hora_cita, estado_cita}) — no cliente_nombre, no servicios
+// breakdown. We derive the payment-step summary from form.values and
+// selectedServiceList locally so the UI is unchanged.
 type CreatedAppointment = {
   id: number
-  cliente_nombre: string
   fecha_hora_cita: string
-  servicios: { nombre_servicio: string; precio_unitario: number }[]
-  precio_historico_cobrado: number
-  sena_historica_pagada: number
+  estado_cita: string
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -83,9 +90,6 @@ export default function Reservar() {
   const { data: busySlots = [] } = useBusySlots(fecha)
   const { data: config } = useConfig()
 
-  const createClientMutation = useCreateClient()
-  const createAppointmentMutation = useCreateAppointment()
-
   const selectedServiceList = services.filter((s: Servicio) => selectedServices.includes(s.id))
   const totalAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.precio_actual, 0)
   const depositAmount = selectedServiceList.reduce((sum: number, s: Servicio) => sum + s.monto_sena_actual, 0)
@@ -143,16 +147,29 @@ export default function Reservar() {
     setMessage(null)
 
     try {
-      const client = await createClientMutation.mutateAsync({
+      // Step 1: lookup-or-create cliente via the unauthenticated
+      // /public/clients endpoint (REQ-PUB-001). The server returns
+      // only {id, was_existing} — no PII echoed.
+      const client = await lookupOrCreatePublicClient({
         nombre: form.values.nombre,
         apellido: form.values.apellido,
         // A-17: strip formatting before sending so the backend never
         // sees "+54 (0341) 555-1234" — only digits.
         telefono: normalizePhone(form.values.telefono),
         dni: form.values.dni,
+        // honeypot: always empty for legitimate visitors (the
+        // HoneypotField input is off-screen and never filled by
+        // humans). Naive bots that auto-fill every DOM input will
+        // send a non-empty value and the server returns a silent 200
+        // with no DB write (D2, REQ-PUB-005).
+        honeypot: '',
       })
-      const appointmentPayload = {
-        id_cliente: client.id,
+      // Step 2: create the cita via /public/appointments
+      // (REQ-PUB-002). NO id_cliente in the payload — the server
+      // resolves the client via DNI. estado_cita is hardcoded to
+      // 'Pendiente' on the server.
+      const appt = await createPublicAppointment({
+        dni: form.values.dni,
         fecha_hora_cita: form.values.fechaHora,
         precio_historico_cobrado: totalAmount,
         sena_historica_pagada: depositAmount,
@@ -162,9 +179,9 @@ export default function Reservar() {
           precio_unitario: s.precio_actual,
           subtotal: s.precio_actual,
         })),
-      }
-      const appt = await createAppointmentMutation.mutateAsync(appointmentPayload) as CreatedAppointment
-      setAppointment(appt)
+        honeypot: '',
+      })
+      setAppointment(appt as CreatedAppointment)
       setSubmitting(false)
       setStep('payment')
     } catch (err: any) {
@@ -172,6 +189,9 @@ export default function Reservar() {
       if (err?.response?.status === 409) {
         setMessageType('error')
         setMessage('El horario elegido ya fue reservado por otra persona. Elegí otro horario.')
+      } else if (err?.response?.status === 404) {
+        setMessageType('error')
+        setMessage('DNI no disponible. Contactá a la administración.')
       } else if (err?.response?.status === 422) {
         setMessageType('error')
         setMessage(getApiError(err).message)
@@ -199,14 +219,19 @@ export default function Reservar() {
     const number = configData.whatsapp_number
     const fecha = formatDateShort(appointment.fecha_hora_cita)
     const hora = formatTime(appointment.fecha_hora_cita)
-    const servicio = appointment.servicios.map(s => s.nombre_servicio).join(', ')
-    const total = appointment.precio_historico_cobrado
-    const sena = appointment.sena_historica_pagada
+    // REQ-PUB-002: /public/appointments returns minimal info — no
+    // servicios breakdown. Derive the WhatsApp message from local
+    // form state (selectedServiceList + form.values) so the summary
+    // is identical to the pre-change UI.
+    const servicio = selectedServiceList.map((s: Servicio) => s.nombre_servicio).join(', ')
+    const total = totalAmount
+    const sena = depositAmount
+    const cliente_nombre = `${form.values.nombre} ${form.values.apellido}`.trim()
 
     const template = [
       'Hola! Te envio el comprobante de la seña de mi turno.',
       '',
-      `Nombre: ${appointment.cliente_nombre}`,
+      `Nombre: ${cliente_nombre}`,
       `Fecha: ${fecha}`,
       `Hora: ${hora}`,
       `Servicio: ${servicio}`,
@@ -371,6 +396,14 @@ export default function Reservar() {
             </div>
           </div>
 
+          {/* HoneypotField (REQ-PUB-005, D2). The field is rendered
+              off-screen inside the form so naive bots that auto-fill
+              every DOM input submit a non-empty 'website' name. The
+              form handler never reads .value — the payload is built
+              with honeypot: '' in step 3. The server returns silent
+              200 on a non-empty honeypot so the bot gets no signal. */}
+          <HoneypotField />
+
           <div className="flex gap-3 mt-4">
             <button type="button" onClick={handleBackToService} className="px-5 py-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] font-semibold cursor-pointer">
               Volver
@@ -499,7 +532,10 @@ export default function Reservar() {
           {appointment && (
             <div className="mt-3">
               <p><strong>N° de turno:</strong> #{appointment.id}</p>
-              <p><strong>Cliente:</strong> {appointment.cliente_nombre}</p>
+              {/* REQ-PUB-002: /public/appointments returns minimal
+                  info; derive cliente_nombre from form.values so the
+                  UX is unchanged from the previous admin-path version. */}
+              <p><strong>Cliente:</strong> {form.values.nombre} {form.values.apellido}</p>
             </div>
           )}
           <p className="hint mt-3">

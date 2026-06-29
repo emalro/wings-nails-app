@@ -1,22 +1,25 @@
 import os
 from dotenv import load_dotenv
 load_dotenv(override=True)
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
-from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
+from pydantic import ValidationError
 from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
-from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 # COOKIE_SECURE defaults to TRUE so production cookies always carry the
@@ -198,6 +201,86 @@ app.add_middleware(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# ── Public booking helpers (REQ-PUB-001..010) ─────────────────────────────
+# See openspec/changes/public-booking/design.md for the design rationale
+# (D2 silent-200 honeypot, D3 per-DNI rate limit, D6 audit log).
+
+# T2 throttling posture: per-IP burst cap + per-DNI durable cap.
+PUBLIC_BOOKING_IP_LIMIT = "10/minute"  # REQ-PUB-007
+PUBLIC_BOOKING_PER_DNI_LIMIT = "3/day"  # REQ-PUB-006
+
+_public_booking_logger = logging.getLogger("public_booking")
+
+
+async def parse_public_client_payload(
+    request: Request,
+) -> PublicClientLookupRequest:
+    """Read and validate the /public/clients body, then expose DNI to the
+    per-DNI key_func (D3). FastAPI resolves Depends BEFORE slowapi's
+    limit-check wrapper runs, so request.state.dni is set in time.
+
+    Pydantic ValidationError is converted to HTTPException(422) with the
+    same shape FastAPI's auto-validation emits (detail=list of
+    {type, loc, msg, input}) so the frontend can use the same error
+    pipeline as the admin endpoints."""
+    body = await request.json()
+    try:
+        payload = PublicClientLookupRequest.model_validate(body)
+    except ValidationError as e:
+        # Mirror FastAPI's default 422 body shape
+        raise HTTPException(status_code=422, detail=e.errors())
+    request.state.dni = payload.dni
+    return payload
+
+
+async def parse_public_appointment_payload(
+    request: Request,
+) -> PublicAppointmentCreate:
+    """Same as parse_public_client_payload but for /public/appointments."""
+    body = await request.json()
+    try:
+        payload = PublicAppointmentCreate.model_validate(body)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+    request.state.dni = payload.dni
+    return payload
+
+
+def get_dni_key(request: Request) -> str:
+    """slowapi key_func: prefer DNI from the validated body (per-DNI cap,
+    REQ-PUB-006). Fall back to the client IP if the DNI has not been set
+    yet (e.g. when slowapi's wrapper runs before Depends — defensive only,
+    the resolved path is the common case)."""
+    dni = getattr(request.state, "dni", None)
+    if dni:
+        return f"dni:{dni}"
+    if request.client and request.client.host:
+        return f"ip:{request.client.host}"
+    return "ip:unknown"
+
+
+def log_public_booking(
+    request: Request,
+    dni: str,
+    action: str,
+    outcome: str,
+) -> None:
+    """Emit one INFO line per public-booking attempt (D6). The `extra`
+    fields are the contract: client_ip, dni, action, outcome. NO PII
+    (no nombre, apellido, telefono, email) is logged. Render captures
+    stdout — that is the audit boundary."""
+    client_ip = request.client.host if request.client else None
+    _public_booking_logger.info(
+        "public_booking event",
+        extra={
+            "client_ip": client_ip,
+            "dni": dni,
+            "action": action,
+            "outcome": outcome,
+        },
+    )
 
 
 @app.get("/health")
@@ -559,6 +642,193 @@ def reactivate_client(client_id: int, current_user: Usuario = Depends(get_curren
     session.commit()
     session.refresh(client)
     return _build_cliente_read_response(client, session)
+
+
+# ── Public Booking Endpoints (REQ-PUB-001..010) ──────────────────────────
+# These endpoints are unauthenticated. Admin paths above stay auth-gated.
+# Throttling: per-IP 10/min on each (REQ-PUB-007), per-DNI 3/day on
+# /public/appointments (REQ-PUB-006). Honeypot is a silent-200 check (D2)
+# — the response shape is identical to a real success so a bot learns
+# nothing from triggering it.
+
+
+@app.post("/public/clients", response_model=PublicClientLookupResponse, status_code=201)
+@limiter.limit(PUBLIC_BOOKING_IP_LIMIT)
+def public_lookup_or_create_client(
+    request: Request,
+    response: Response,
+    payload: PublicClientLookupRequest = Depends(parse_public_client_payload),
+    session: Session = Depends(get_session),
+):
+    """Lookup-or-create by DNI (REQ-PUB-001). Returns minimal info only —
+    no PII echoed. Deactivated clients (activo=False) are treated as
+    'not found' (D5, REQ-PUB-008) so the public caller can never silently
+    reactivate a deactivated record. Race on concurrent same-DNI INSERT
+    is resolved via IntegrityError → re-query (D8, REQ-PUB-010)."""
+    # Silent-200 honeypot check (D2, REQ-PUB-005). The route does the
+    # check (not a Pydantic field_validator) so the response body
+    # matches a real success and the bot gets no signal.
+    if payload.honeypot.strip():
+        log_public_booking(request, payload.dni, "lookup_create_client", "honeypot")
+        # 200 (not 201) so the shape matches a real hit; no DB write.
+        return JSONResponse(
+            status_code=200,
+            content=PublicClientLookupResponse(id=0, was_existing=False).model_dump(mode="json"),
+        )
+
+    existing = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+    ).first()
+    if existing:
+        # Hit → 200 (REQ-PUB-001 scenario "Existing active DNI returns
+        # minimal info"). The decorator's default is 201; override on
+        # the response object so the wire status matches the spec.
+        response.status_code = 200
+        log_public_booking(request, payload.dni, "lookup_create_client", "success")
+        return PublicClientLookupResponse(id=existing.id, was_existing=True)
+
+    # Pre-check for a deactivated DNI (REQ-PUB-008, D5). The unique
+    # constraint on cliente.dni would block an INSERT, so we surface a
+    # 404 BEFORE attempting it. No silent reactivation (D5): the public
+    # caller cannot resurrect or shadow a deactivated DNI. Admin must
+    # reactivate or hard-delete the old record.
+    deactivated = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == False)
+    ).first()
+    if deactivated:
+        log_public_booking(request, payload.dni, "lookup_create_client", "deactivated")
+        raise HTTPException(
+            status_code=404,
+            detail="DNI no disponible. Contactá a la administración.",
+        )
+
+    try:
+        db_client = Cliente(
+            dni=payload.dni,
+            nombre=payload.nombre,
+            apellido=payload.apellido,
+        )
+        session.add(db_client)
+        session.commit()
+        session.refresh(db_client)
+        if payload.telefono:
+            session.add(ClienteTelefono(
+                id_cliente=db_client.id,
+                telefono=payload.telefono,
+                es_principal=True,
+            ))
+            session.commit()
+        log_public_booking(request, payload.dni, "lookup_create_client", "success")
+        return PublicClientLookupResponse(id=db_client.id, was_existing=False)
+    except IntegrityError:
+        # Race: another caller inserted the same DNI between our
+        # lookup and our commit (D8, REQ-PUB-010). Roll back our
+        # half-session, re-query, return the winner with
+        # was_existing=True.
+        session.rollback()
+        existing = session.exec(
+            select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+        ).first()
+        if existing:
+            log_public_booking(request, payload.dni, "lookup_create_client", "success")
+            response.status_code = 200
+            return PublicClientLookupResponse(id=existing.id, was_existing=True)
+        # Truly unexpected: rollback succeeded but no row. Surface 500
+        # via re-raise (D8 explicit error path).
+        raise
+
+
+@app.post("/public/appointments", response_model=PublicAppointmentResponse, status_code=201)
+@limiter.limit(PUBLIC_BOOKING_IP_LIMIT)
+@limiter.shared_limit(
+    PUBLIC_BOOKING_PER_DNI_LIMIT,
+    scope="public_booking_per_dni",
+    key_func=get_dni_key,
+)
+def public_create_appointment(
+    request: Request,
+    payload: PublicAppointmentCreate = Depends(parse_public_appointment_payload),
+    session: Session = Depends(get_session),
+):
+    """Create a Pendiente cita for an existing active DNI (REQ-PUB-002).
+
+    Throttling:
+    - per-IP @limiter.limit('10/minute') (REQ-PUB-007)
+    - per-DNI @limiter.shared_limit('3/day', scope='public_booking_per_dni',
+      key_func=get_dni_key) (REQ-PUB-006)
+
+    Order of operations:
+    1. silent-200 honeypot check (D2, REQ-PUB-005)
+    2. lookup Cliente by (dni, activo=True) → 404 if missing (REQ-PUB-002/008)
+    3. validate_appointment_hours (422)
+    4. find_conflicting_appointment (409)
+    5. INSERT Cita(estado_cita=Pendiente, metodo_pago_sena='Transferencia')
+       + CitaServicio[] + cliente.cantidad_turnos_tomados += 1
+    """
+    # 1. Silent-200 honeypot (D2). Same pattern as /public/clients.
+    if payload.honeypot.strip():
+        log_public_booking(request, payload.dni, "create_appointment", "honeypot")
+        return JSONResponse(
+            status_code=200,
+            content=PublicAppointmentResponse(
+                id=0,
+                fecha_hora_cita=payload.fecha_hora_cita,
+                estado_cita=EstadoCita.pendiente,
+            ).model_dump(mode="json"),
+        )
+
+    # 2. Lookup active Cliente (REQ-PUB-002, REQ-PUB-008)
+    client = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+    ).first()
+    if not client:
+        log_public_booking(request, payload.dni, "create_appointment", "not_found")
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    # 3. Validate business hours (422)
+    duration = sum(s.duracion_minutos for s in payload.servicios)
+    validate_appointment_hours(payload.fecha_hora_cita, duration, session)
+
+    # 4. Check for conflicting slot (409)
+    conflict = find_conflicting_appointment(payload.fecha_hora_cita, duration, session)
+    if conflict:
+        log_public_booking(request, payload.dni, "create_appointment", "conflict")
+        raise HTTPException(
+            status_code=409,
+            detail="El horario elegido ya está ocupado. Por favor elegí otra franja.",
+        )
+
+    # 5. Insert Cita + CitaServicio + increment counter
+    cita = Cita(
+        id_cliente=client.id,
+        fecha_hora_cita=payload.fecha_hora_cita,
+        precio_historico_cobrado=payload.precio_historico_cobrado,
+        sena_historica_pagada=payload.sena_historica_pagada,
+        metodo_pago_sena="Transferencia",  # REQ-PUB-002 default
+        estado_cita=EstadoCita.pendiente,  # hardcoded (REQ-PUB-004)
+    )
+    session.add(cita)
+    session.commit()
+    session.refresh(cita)
+
+    for s in payload.servicios:
+        session.add(CitaServicio(
+            cita_id=cita.id,
+            servicio_id=s.servicio_id,
+            duracion_minutos=s.duracion_minutos,
+            precio_unitario=s.precio_unitario,
+            subtotal=s.subtotal,
+        ))
+    client.cantidad_turnos_tomados += 1
+    session.commit()
+    session.refresh(cita)
+
+    log_public_booking(request, payload.dni, "create_appointment", "success")
+    return PublicAppointmentResponse(
+        id=cita.id,
+        fecha_hora_cita=cita.fecha_hora_cita,
+        estado_cita=cita.estado_cita,
+    )
 
 
 # ── Phone Sub-resources ──────────────────────────────────────────────────────
