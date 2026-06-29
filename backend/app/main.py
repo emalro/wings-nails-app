@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
-from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -14,6 +14,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
+from pydantic import ValidationError
 from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
@@ -218,9 +219,18 @@ async def parse_public_client_payload(
 ) -> PublicClientLookupRequest:
     """Read and validate the /public/clients body, then expose DNI to the
     per-DNI key_func (D3). FastAPI resolves Depends BEFORE slowapi's
-    limit-check wrapper runs, so request.state.dni is set in time."""
+    limit-check wrapper runs, so request.state.dni is set in time.
+
+    Pydantic ValidationError is converted to HTTPException(422) with the
+    same shape FastAPI's auto-validation emits (detail=list of
+    {type, loc, msg, input}) so the frontend can use the same error
+    pipeline as the admin endpoints."""
     body = await request.json()
-    payload = PublicClientLookupRequest.model_validate(body)
+    try:
+        payload = PublicClientLookupRequest.model_validate(body)
+    except ValidationError as e:
+        # Mirror FastAPI's default 422 body shape
+        raise HTTPException(status_code=422, detail=e.errors())
     request.state.dni = payload.dni
     return payload
 
@@ -230,7 +240,10 @@ async def parse_public_appointment_payload(
 ) -> PublicAppointmentCreate:
     """Same as parse_public_client_payload but for /public/appointments."""
     body = await request.json()
-    payload = PublicAppointmentCreate.model_validate(body)
+    try:
+        payload = PublicAppointmentCreate.model_validate(body)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
     request.state.dni = payload.dni
     return payload
 
@@ -629,6 +642,100 @@ def reactivate_client(client_id: int, current_user: Usuario = Depends(get_curren
     session.commit()
     session.refresh(client)
     return _build_cliente_read_response(client, session)
+
+
+# ── Public Booking Endpoints (REQ-PUB-001..010) ──────────────────────────
+# These endpoints are unauthenticated. Admin paths above stay auth-gated.
+# Throttling: per-IP 10/min on each (REQ-PUB-007), per-DNI 3/day on
+# /public/appointments (REQ-PUB-006). Honeypot is a silent-200 check (D2)
+# — the response shape is identical to a real success so a bot learns
+# nothing from triggering it.
+
+
+@app.post("/public/clients", response_model=PublicClientLookupResponse, status_code=201)
+@limiter.limit(PUBLIC_BOOKING_IP_LIMIT)
+def public_lookup_or_create_client(
+    request: Request,
+    response: Response,
+    payload: PublicClientLookupRequest = Depends(parse_public_client_payload),
+    session: Session = Depends(get_session),
+):
+    """Lookup-or-create by DNI (REQ-PUB-001). Returns minimal info only —
+    no PII echoed. Deactivated clients (activo=False) are treated as
+    'not found' (D5, REQ-PUB-008) so the public caller can never silently
+    reactivate a deactivated record. Race on concurrent same-DNI INSERT
+    is resolved via IntegrityError → re-query (D8, REQ-PUB-010)."""
+    # Silent-200 honeypot check (D2, REQ-PUB-005). The route does the
+    # check (not a Pydantic field_validator) so the response body
+    # matches a real success and the bot gets no signal.
+    if payload.honeypot.strip():
+        log_public_booking(request, payload.dni, "lookup_create_client", "honeypot")
+        # 200 (not 201) so the shape matches a real hit; no DB write.
+        return JSONResponse(
+            status_code=200,
+            content=PublicClientLookupResponse(id=0, was_existing=False).model_dump(),
+        )
+
+    existing = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+    ).first()
+    if existing:
+        # Hit → 200 (REQ-PUB-001 scenario "Existing active DNI returns
+        # minimal info"). The decorator's default is 201; override on
+        # the response object so the wire status matches the spec.
+        response.status_code = 200
+        log_public_booking(request, payload.dni, "lookup_create_client", "success")
+        return PublicClientLookupResponse(id=existing.id, was_existing=True)
+
+    # Pre-check for a deactivated DNI (REQ-PUB-008, D5). The unique
+    # constraint on cliente.dni would block an INSERT, so we surface a
+    # 404 BEFORE attempting it. No silent reactivation (D5): the public
+    # caller cannot resurrect or shadow a deactivated DNI. Admin must
+    # reactivate or hard-delete the old record.
+    deactivated = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == False)
+    ).first()
+    if deactivated:
+        log_public_booking(request, payload.dni, "lookup_create_client", "deactivated")
+        raise HTTPException(
+            status_code=404,
+            detail="DNI no disponible. Contactá a la administración.",
+        )
+
+    try:
+        db_client = Cliente(
+            dni=payload.dni,
+            nombre=payload.nombre,
+            apellido=payload.apellido,
+        )
+        session.add(db_client)
+        session.commit()
+        session.refresh(db_client)
+        if payload.telefono:
+            session.add(ClienteTelefono(
+                id_cliente=db_client.id,
+                telefono=payload.telefono,
+                es_principal=True,
+            ))
+            session.commit()
+        log_public_booking(request, payload.dni, "lookup_create_client", "success")
+        return PublicClientLookupResponse(id=db_client.id, was_existing=False)
+    except IntegrityError:
+        # Race: another caller inserted the same DNI between our
+        # lookup and our commit (D8, REQ-PUB-010). Roll back our
+        # half-session, re-query, return the winner with
+        # was_existing=True.
+        session.rollback()
+        existing = session.exec(
+            select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+        ).first()
+        if existing:
+            log_public_booking(request, payload.dni, "lookup_create_client", "success")
+            response.status_code = 200
+            return PublicClientLookupResponse(id=existing.id, was_existing=True)
+        # Truly unexpected: rollback succeeded but no row. Surface 500
+        # via re-raise (D8 explicit error path).
+        raise
 
 
 # ── Phone Sub-resources ──────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ if os.path.exists("test.db"):
 from fastapi.testclient import TestClient
 from app.main import app, seed_default_schedule
 from app.database import create_db_and_tables, engine
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 # Ensure DB tables exist for tests
 create_db_and_tables()
@@ -2587,3 +2587,119 @@ def test_public_appointment_sena_excede_precio_rejected():
     err_str = str(exc_info.value)
     assert "sena_excede_precio" in err_str, \
         f"Expected 'sena_excede_precio' error type, got: {err_str}"
+
+
+# ── PUBLIC BOOKING: /public/clients endpoint (REQ-PUB-001, 003, 005, 008) ─
+
+
+def _public_client_payload(**overrides) -> dict:
+    """Baseline valid body for POST /public/clients. UNIQUE DNI per call
+    via _unique_dni() so concurrent / cross-test state can't pollute."""
+    base = {
+        "dni": _unique_dni(),
+        "nombre": "Lucia",
+        "apellido": "Perez",
+        "telefono": _unique_phone(),
+        "honeypot": "",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_public_clients_new_dni_returns_201():
+    """REQ-PUB-001: New DNI → 201, was_existing=false, body has only {id, was_existing}."""
+    payload = _public_client_payload()
+    r = client.post("/public/clients", json=payload)
+    assert r.status_code == 201, f"Expected 201, got {r.status_code}: {r.text}"
+    data = r.json()
+    assert set(data.keys()) == {"id", "was_existing"}, f"Unexpected keys: {data.keys()}"
+    assert data["was_existing"] is False
+    assert isinstance(data["id"], int) and data["id"] > 0
+
+
+def test_public_clients_existing_active_returns_200():
+    """REQ-PUB-001: Existing active DNI → 200, was_existing=true, NO PII echoed."""
+    # Seed: create one client via the admin path (it sets activo=True)
+    first_payload = _public_client_payload()
+    r1 = client.post("/public/clients", json=first_payload)
+    assert r1.status_code == 201, f"Setup POST 1 failed: {r1.text}"
+    first_id = r1.json()["id"]
+
+    # Lookup with the same DNI
+    second_payload = _public_client_payload(
+        dni=first_payload["dni"],
+        nombre="Other",  # different name; should NOT be reflected in response
+        apellido="Name",
+    )
+    r2 = client.post("/public/clients", json=second_payload)
+    assert r2.status_code == 200, f"Expected 200, got {r2.status_code}: {r2.text}"
+    data = r2.json()
+    assert set(data.keys()) == {"id", "was_existing"}
+    assert data["was_existing"] is True
+    assert data["id"] == first_id
+
+
+def test_public_clients_deactivated_dni_treated_as_new():
+    """REQ-PUB-008 (D5): Deactivated client treated as not found →
+    a fresh POST with the same DNI returns 404. The unique constraint on
+    Cliente.dni physically prevents creating a new row when a deactivated
+    one exists; the public caller must ask the admin to reactivate or
+    hard-delete the old record. No silent reactivation (D5)."""
+    from app.models import Cliente
+
+    first_payload = _public_client_payload()
+    r1 = client.post("/public/clients", json=first_payload)
+    assert r1.status_code == 201
+    first_id = r1.json()["id"]
+
+    # Deactivate that client via the admin path
+    del_r = client.delete(f"/clients/{first_id}")
+    assert del_r.status_code == 204, f"Setup DELETE failed: {del_r.text}"
+    with Session(engine) as s:
+        c = s.get(Cliente, first_id)
+        assert c is not None and c.activo is False, "Setup: client not deactivated"
+
+    # New POST with same DNI → 404 (per REQ-PUB-008, the public caller
+    # cannot resurrect or shadow a deactivated DNI).
+    second_payload = _public_client_payload(dni=first_payload["dni"])
+    r2 = client.post("/public/clients", json=second_payload)
+    assert r2.status_code == 404, f"Expected 404, got {r2.status_code}: {r2.text}"
+
+
+def test_public_clients_rejects_id_cliente_in_body():
+    """REQ-PUB-003: POST /public/clients rejects `id_cliente` in body (extra='forbid')."""
+    payload = _public_client_payload()
+    payload["id_cliente"] = 999
+    r = client.post("/public/clients", json=payload)
+    assert r.status_code == 422, f"Expected 422, got {r.status_code}: {r.text}"
+    detail = r.json()["detail"]
+    assert any("id_cliente" in str(e.get("loc", "")) for e in detail), \
+        f"Expected id_cliente in errors, got: {detail}"
+
+
+def test_public_clients_silent_200_on_honeypot_filled_no_db_write():
+    """REQ-PUB-005: Filled honeypot → silent 200 (no 4xx signal), no Cliente row created.
+
+    The response body must match the success shape (id=0, was_existing=false) so
+    the bot can't distinguish a triggered honeypot from a real success.
+    """
+    from app.models import Cliente
+
+    # Count clientes before
+    with Session(engine) as s:
+        before = len(s.exec(select(Cliente)).all())
+
+    payload = _public_client_payload()
+    payload["honeypot"] = "http://spam.example.com"
+
+    r = client.post("/public/clients", json=payload)
+    assert r.status_code == 200, f"Expected silent 200, got {r.status_code}: {r.text}"
+    data = r.json()
+    # Body matches the success shape — bot can't distinguish from a real success
+    assert set(data.keys()) == {"id", "was_existing"}
+    assert data["was_existing"] is False
+
+    # No Cliente row was created
+    with Session(engine) as s:
+        after = len(s.exec(select(Cliente)).all())
+    assert after == before, f"Honeypot triggered a DB write: before={before}, after={after}"
