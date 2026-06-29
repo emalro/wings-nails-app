@@ -19,17 +19,10 @@ from app.database import create_db_and_tables, engine
 from sqlmodel import Session, select
 from sqlalchemy.exc import IntegrityError
 
-# Reset slowapi's in-memory rate-limit storage after every test.
-# Without this, the 10/min per-IP limit on /public/* accumulates across
-# the 18+ new public-booking tests and the slowapi/extension test
-# would see spurious 429s. The B-8 commit (f2a86b6) introduced this
-# fixture; it was reverted in b02ce05 along with the admin-paths-as-public
-# approach. Reintroduced here so the public-booking suite is testable.
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    yield
-    from app.main import limiter
-    limiter.reset()
+# Reset slowapi's in-memory rate-limit storage after every test is now
+# applied globally via backend/tests/conftest.py. It used to live here
+# in test_api.py only, which left test_endpoints.py::TestAuthEndpoints
+# vulnerable to 429 pollution from earlier tests in the full suite.
 
 # Ensure DB tables exist for tests
 create_db_and_tables()
