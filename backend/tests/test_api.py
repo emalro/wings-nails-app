@@ -17,6 +17,18 @@ from app.main import app, seed_default_schedule
 from app.database import create_db_and_tables, engine
 from sqlmodel import Session, select
 
+# Reset slowapi's in-memory rate-limit storage after every test.
+# Without this, the 10/min per-IP limit on /public/* accumulates across
+# the 18+ new public-booking tests and the slowapi/extension test
+# would see spurious 429s. The B-8 commit (f2a86b6) introduced this
+# fixture; it was reverted in b02ce05 along with the admin-paths-as-public
+# approach. Reintroduced here so the public-booking suite is testable.
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    yield
+    from app.main import limiter
+    limiter.reset()
+
 # Ensure DB tables exist for tests
 create_db_and_tables()
 # Seed default schedule so tests have 7 records
@@ -2703,3 +2715,176 @@ def test_public_clients_silent_200_on_honeypot_filled_no_db_write():
     with Session(engine) as s:
         after = len(s.exec(select(Cliente)).all())
     assert after == before, f"Honeypot triggered a DB write: before={before}, after={after}"
+
+
+# ── PUBLIC BOOKING: /public/appointments endpoint (REQ-PUB-002..010) ──────
+
+
+def _public_appointment_payload(**overrides) -> dict:
+    """Baseline valid body for POST /public/appointments. Caller passes
+    a known service_id and a unique future-slot per call. DNI and slot
+    are unique per call so cross-test isolation holds."""
+    # Each test gets a unique future business-day slot (no weekends)
+    days_offset, _ = _unique_date_offset()
+    appt_dt = _BASE_TEST_DATE + timedelta(days=days_offset)
+    # All 10:00 — far enough into business hours for any duration
+    appt_dt = appt_dt.replace(hour=10, minute=0, second=0, microsecond=0)
+
+    base = {
+        "dni": _unique_dni(),
+        "fecha_hora_cita": appt_dt.isoformat(),
+        "precio_historico_cobrado": 2500.0,
+        "sena_historica_pagada": 500.0,
+        "honeypot": "",
+        "servicios": [],  # callers MUST populate this
+    }
+    base.update(overrides)
+    return base
+
+
+def _seed_active_cliente_and_service(dni: str | None = None) -> tuple[int, int]:
+    """Create an active Cliente + Servicio via admin paths, return
+    (cliente_id, servicio_id). Both already exist in the test DB."""
+    if dni is None:
+        dni = _unique_dni()
+    # Create cliente
+    cliente_r = client.post("/clients", json={
+        "nombre": "Active", "apellido": "User", "dni": dni, "telefono": _unique_phone(),
+    })
+    assert cliente_r.status_code == 201, f"Setup cliente failed: {cliente_r.text}"
+    cliente_id = cliente_r.json()["id"]
+
+    # Create servicio
+    service_r = client.post("/services", json={
+        "nombre_servicio": "Manicura",
+        "duracion_minutos": 60,
+        "precio_actual": 2500.0,
+        "monto_sena_actual": 500.0,
+        "descripcion": "Manicura Spa",
+        "activo": True,
+    })
+    assert service_r.status_code == 200, f"Setup service failed: {service_r.text}"
+    service_id = service_r.json()["id"]
+    return cliente_id, service_id
+
+
+def test_public_appointments_creates_pendiente():
+    """REQ-PUB-002: Successful POST → 201, estado_cita='Pendiente', counter incremented."""
+    dni = _unique_dni()
+    cliente_id, service_id = _seed_active_cliente_and_service(dni)
+
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": service_id,
+        "duracion_minutos": 60,
+        "precio_unitario": 2500.0,
+        "subtotal": 2500.0,
+    }])
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 201, f"Expected 201, got {r.status_code}: {r.text}"
+    data = r.json()
+    assert set(data.keys()) == {"id", "fecha_hora_cita", "estado_cita"}, f"Unexpected keys: {data.keys()}"
+    assert data["estado_cita"] == "Pendiente"
+
+    # Counter incremented
+    cliente_r = client.get(f"/clients/{cliente_id}")
+    assert cliente_r.json()["cantidad_turnos_tomados"] == 1
+
+
+def test_public_appointments_slot_conflict_409():
+    """REQ-PUB-002: Conflicting slot → 409."""
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    # First booking succeeds
+    r1 = client.post("/public/appointments", json=payload)
+    assert r1.status_code == 201, f"Setup booking 1 failed: {r1.text}"
+
+    # Second booking at the same slot (different DNI to dodge per-DNI limit)
+    dni2 = _unique_dni()
+    _seed_active_cliente_and_service(dni2)
+    payload2 = _public_appointment_payload(dni=dni2, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    # Same fecha_hora_cita as payload
+    payload2["fecha_hora_cita"] = payload["fecha_hora_cita"]
+    r2 = client.post("/public/appointments", json=payload2)
+    assert r2.status_code == 409, f"Expected 409, got {r2.status_code}: {r2.text}"
+
+
+def test_public_appointments_sena_excede_precio_422():
+    """REQ-PUB-002 + REQ-DVA-001: sena > precio → 422 with literal type 'sena_excede_precio'."""
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+
+    payload = _public_appointment_payload(
+        dni=dni,
+        precio_historico_cobrado=1000.0,
+        sena_historica_pagada=2500.0,  # sena > precio
+        servicios=[{
+            "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 1000.0, "subtotal": 1000.0,
+        }],
+    )
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 422, f"Expected 422, got {r.status_code}: {r.text}"
+    detail = r.json()["detail"]
+    assert isinstance(detail, list) and len(detail) > 0
+    assert detail[0]["type"] == "sena_excede_precio", \
+        f"Expected 'sena_excede_precio', got: {detail[0]['type']!r}"
+
+
+def test_public_appointments_rejects_id_cliente():
+    """REQ-PUB-003: /public/appointments rejects id_cliente in body."""
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    payload["id_cliente"] = 999
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert any("id_cliente" in str(e.get("loc", "")) for e in detail)
+
+
+def test_public_appointments_rejects_estado_cita():
+    """REQ-PUB-004: /public/appointments rejects estado_cita in body (hardcoded Pendiente)."""
+    dni = _unique_dni()
+    _seed_active_cliente_and_service(dni)
+
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    payload["estado_cita"] = "Asistido"
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert any("estado_cita" in str(e.get("loc", "")) for e in detail)
+
+
+def test_public_appointments_dni_not_found_404():
+    """REQ-PUB-002: Unknown DNI → 404."""
+    payload = _public_appointment_payload(dni=_unique_dni(), servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 404, f"Expected 404, got {r.status_code}: {r.text}"
+
+
+def test_public_appointments_deactivated_dni_404():
+    """REQ-PUB-008: Deactivated client → 404 (D5)."""
+    dni = _unique_dni()
+    cliente_id, _ = _seed_active_cliente_and_service(dni)
+
+    # Deactivate the client
+    del_r = client.delete(f"/clients/{cliente_id}")
+    assert del_r.status_code == 204
+
+    payload = _public_appointment_payload(dni=dni, servicios=[{
+        "servicio_id": 1, "duracion_minutos": 60, "precio_unitario": 2500.0, "subtotal": 2500.0,
+    }])
+    r = client.post("/public/appointments", json=payload)
+    assert r.status_code == 404, f"Expected 404, got {r.status_code}: {r.text}"

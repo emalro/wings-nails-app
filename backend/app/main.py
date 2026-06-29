@@ -738,6 +738,99 @@ def public_lookup_or_create_client(
         raise
 
 
+@app.post("/public/appointments", response_model=PublicAppointmentResponse, status_code=201)
+@limiter.limit(PUBLIC_BOOKING_IP_LIMIT)
+@limiter.shared_limit(
+    PUBLIC_BOOKING_PER_DNI_LIMIT,
+    scope="public_booking_per_dni",
+    key_func=get_dni_key,
+)
+def public_create_appointment(
+    request: Request,
+    payload: PublicAppointmentCreate = Depends(parse_public_appointment_payload),
+    session: Session = Depends(get_session),
+):
+    """Create a Pendiente cita for an existing active DNI (REQ-PUB-002).
+
+    Throttling:
+    - per-IP @limiter.limit('10/minute') (REQ-PUB-007)
+    - per-DNI @limiter.shared_limit('3/day', scope='public_booking_per_dni',
+      key_func=get_dni_key) (REQ-PUB-006)
+
+    Order of operations:
+    1. silent-200 honeypot check (D2, REQ-PUB-005)
+    2. lookup Cliente by (dni, activo=True) → 404 if missing (REQ-PUB-002/008)
+    3. validate_appointment_hours (422)
+    4. find_conflicting_appointment (409)
+    5. INSERT Cita(estado_cita=Pendiente, metodo_pago_sena='Transferencia')
+       + CitaServicio[] + cliente.cantidad_turnos_tomados += 1
+    """
+    # 1. Silent-200 honeypot (D2). Same pattern as /public/clients.
+    if payload.honeypot.strip():
+        log_public_booking(request, payload.dni, "create_appointment", "honeypot")
+        return JSONResponse(
+            status_code=200,
+            content=PublicAppointmentResponse(
+                id=0,
+                fecha_hora_cita=payload.fecha_hora_cita,
+                estado_cita=EstadoCita.pendiente,
+            ).model_dump(),
+        )
+
+    # 2. Lookup active Cliente (REQ-PUB-002, REQ-PUB-008)
+    client = session.exec(
+        select(Cliente).where(Cliente.dni == payload.dni, Cliente.activo == True)
+    ).first()
+    if not client:
+        log_public_booking(request, payload.dni, "create_appointment", "not_found")
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    # 3. Validate business hours (422)
+    duration = sum(s.duracion_minutos for s in payload.servicios)
+    validate_appointment_hours(payload.fecha_hora_cita, duration, session)
+
+    # 4. Check for conflicting slot (409)
+    conflict = find_conflicting_appointment(payload.fecha_hora_cita, duration, session)
+    if conflict:
+        log_public_booking(request, payload.dni, "create_appointment", "conflict")
+        raise HTTPException(
+            status_code=409,
+            detail="El horario elegido ya está ocupado. Por favor elegí otra franja.",
+        )
+
+    # 5. Insert Cita + CitaServicio + increment counter
+    cita = Cita(
+        id_cliente=client.id,
+        fecha_hora_cita=payload.fecha_hora_cita,
+        precio_historico_cobrado=payload.precio_historico_cobrado,
+        sena_historica_pagada=payload.sena_historica_pagada,
+        metodo_pago_sena="Transferencia",  # REQ-PUB-002 default
+        estado_cita=EstadoCita.pendiente,  # hardcoded (REQ-PUB-004)
+    )
+    session.add(cita)
+    session.commit()
+    session.refresh(cita)
+
+    for s in payload.servicios:
+        session.add(CitaServicio(
+            cita_id=cita.id,
+            servicio_id=s.servicio_id,
+            duracion_minutos=s.duracion_minutos,
+            precio_unitario=s.precio_unitario,
+            subtotal=s.subtotal,
+        ))
+    client.cantidad_turnos_tomados += 1
+    session.commit()
+    session.refresh(cita)
+
+    log_public_booking(request, payload.dni, "create_appointment", "success")
+    return PublicAppointmentResponse(
+        id=cita.id,
+        fecha_hora_cita=cita.fecha_hora_cita,
+        estado_cita=cita.estado_cita,
+    )
+
+
 # ── Phone Sub-resources ──────────────────────────────────────────────────────
 
 
