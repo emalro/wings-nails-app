@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 load_dotenv(override=True)
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
@@ -10,13 +11,14 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
 from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario
-from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 # COOKIE_SECURE defaults to TRUE so production cookies always carry the
@@ -198,6 +200,74 @@ app.add_middleware(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# ── Public booking helpers (REQ-PUB-001..010) ─────────────────────────────
+# See openspec/changes/public-booking/design.md for the design rationale
+# (D2 silent-200 honeypot, D3 per-DNI rate limit, D6 audit log).
+
+# T2 throttling posture: per-IP burst cap + per-DNI durable cap.
+PUBLIC_BOOKING_IP_LIMIT = "10/minute"  # REQ-PUB-007
+PUBLIC_BOOKING_PER_DNI_LIMIT = "3/day"  # REQ-PUB-006
+
+_public_booking_logger = logging.getLogger("public_booking")
+
+
+async def parse_public_client_payload(
+    request: Request,
+) -> PublicClientLookupRequest:
+    """Read and validate the /public/clients body, then expose DNI to the
+    per-DNI key_func (D3). FastAPI resolves Depends BEFORE slowapi's
+    limit-check wrapper runs, so request.state.dni is set in time."""
+    body = await request.json()
+    payload = PublicClientLookupRequest.model_validate(body)
+    request.state.dni = payload.dni
+    return payload
+
+
+async def parse_public_appointment_payload(
+    request: Request,
+) -> PublicAppointmentCreate:
+    """Same as parse_public_client_payload but for /public/appointments."""
+    body = await request.json()
+    payload = PublicAppointmentCreate.model_validate(body)
+    request.state.dni = payload.dni
+    return payload
+
+
+def get_dni_key(request: Request) -> str:
+    """slowapi key_func: prefer DNI from the validated body (per-DNI cap,
+    REQ-PUB-006). Fall back to the client IP if the DNI has not been set
+    yet (e.g. when slowapi's wrapper runs before Depends — defensive only,
+    the resolved path is the common case)."""
+    dni = getattr(request.state, "dni", None)
+    if dni:
+        return f"dni:{dni}"
+    if request.client and request.client.host:
+        return f"ip:{request.client.host}"
+    return "ip:unknown"
+
+
+def log_public_booking(
+    request: Request,
+    dni: str,
+    action: str,
+    outcome: str,
+) -> None:
+    """Emit one INFO line per public-booking attempt (D6). The `extra`
+    fields are the contract: client_ip, dni, action, outcome. NO PII
+    (no nombre, apellido, telefono, email) is logged. Render captures
+    stdout — that is the audit boundary."""
+    client_ip = request.client.host if request.client else None
+    _public_booking_logger.info(
+        "public_booking event",
+        extra={
+            "client_ip": client_ip,
+            "dni": dni,
+            "action": action,
+            "outcome": outcome,
+        },
+    )
 
 
 @app.get("/health")
