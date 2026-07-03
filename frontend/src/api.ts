@@ -475,3 +475,22 @@ export async function createPublicAppointment(
   const r = await api.post('/public/appointments', payload)
   return r.data
 }
+
+// ── Gallery API (public read) ──────────────────────────────────────────────
+// Added in PR 2 (home-static-sections)
+
+export type GalleryItemRead = {
+  id: number
+  orden: number
+  image_url: string
+  alt_text: string
+  link_url: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function getGallery(): Promise<GalleryItemRead[]> {
+  const r = await api.get('/gallery')
+  return r.data
+}
