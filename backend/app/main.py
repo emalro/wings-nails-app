@@ -4,7 +4,7 @@ load_dotenv(override=True)
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +14,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select, or_
 from sqlalchemy import text
-from pydantic import ValidationError
+from pydantic import HttpUrl, ValidationError
 from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
@@ -1041,6 +1041,21 @@ def _check_orden_conflict(
         )
 
 
+def _url_to_str(url: HttpUrl) -> str:
+    """R12: convert HttpUrl to str, stripping the trailing slash and
+    default port for bare hostnames. Pydantic v2 normalizes
+    `https://example.com` to path=`/` and port=443, so `str(url)` is
+    `https://example.com:443/`. The canonical form is
+    `https://example.com` (no port, no slash). URLs with a real path
+    are kept as str(url)."""
+    if url.path and url.path != "/":
+        return str(url)
+    default_port = 443 if url.scheme == "https" else 80 if url.scheme == "http" else None
+    if url.port and url.port != default_port:
+        return f"{url.scheme}://{url.host}:{url.port}"
+    return f"{url.scheme}://{url.host}"
+
+
 @app.post("/gallery", response_model=GalleryItemRead, status_code=201)
 def create_gallery_item(
     payload: GalleryItemCreate,
@@ -1053,15 +1068,56 @@ def create_gallery_item(
     _check_orden_conflict(session, payload.orden)
     item = GalleryItem(
         orden=payload.orden,
-        image_url=str(payload.image_url),
+        image_url=_url_to_str(payload.image_url),
         alt_text=payload.alt_text,
-        link_url=str(payload.link_url) if payload.link_url is not None else None,
+        link_url=_url_to_str(payload.link_url) if payload.link_url is not None else None,
         activo=payload.activo,
     )
     session.add(item)
     session.commit()
     session.refresh(item)
     return item
+
+
+@app.patch("/gallery/{gallery_id}", response_model=GalleryItemRead)
+def update_gallery_item(
+    gallery_id: int,
+    payload: GalleryItemUpdate,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: partial update via model_dump(exclude_unset=True). orden
+    is immutable (omitted from GalleryItemUpdate), so the orden_conflict
+    check is unreachable here — included for future-proofing only."""
+    item = session.get(GalleryItem, gallery_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="GalleryItem no encontrado")
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if key in ("image_url", "link_url") and value is not None:
+            value = _url_to_str(value)
+        setattr(item, key, value)
+    item.updated_at = datetime.now(timezone.utc)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+@app.delete("/gallery/{gallery_id}", status_code=204)
+def delete_gallery_item(
+    gallery_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: hard delete. The orden slot becomes free; seed_default_gallery
+    will NOT recreate it (the seed only runs on an empty table)."""
+    item = session.get(GalleryItem, gallery_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="GalleryItem no encontrado")
+    session.delete(item)
+    session.commit()
+    return Response(status_code=204)
 
 
 def calculate_duration_for_cita(cita: Cita, session: Session) -> int:

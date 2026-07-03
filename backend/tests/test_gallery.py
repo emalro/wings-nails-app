@@ -170,6 +170,134 @@ class TestGalleryAdminCreate:
         assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
 
 
+# ── W1.5: Admin PATCH + DELETE /gallery (RED → GREEN) ──────────────────────
+# 6 design tests + 1 R12 trailing-slash test (verify gate).
+
+
+class TestGalleryAdminPatch:
+    """REQ-HMG-021: PATCH /gallery/{id} partial update via
+    model_dump(exclude_unset=True). orden is immutable (excluded from
+    GalleryItemUpdate)."""
+
+    def _seed_item(self, session) -> GalleryItem:
+        item = GalleryItem(
+            orden=1, image_url="https://example.com/seed.jpg",
+            alt_text="Seed", activo=False,
+        )
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+    def test_patch_updates_only_provided_fields(
+        self, client, session, auth_headers
+    ):
+        """Only the fields in the body change; the rest stay put."""
+        item = self._seed_item(session)
+        resp = client.patch(
+            f"/gallery/{item.id}",
+            json={"alt_text": "Updated alt", "link_url": "https://instagram.com/p/abc"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        body = resp.json()
+        assert body["alt_text"] == "Updated alt"
+        assert body["link_url"] == "https://instagram.com/p/abc"
+        # Untouched fields
+        assert body["image_url"] == "https://example.com/seed.jpg"
+        assert body["orden"] == 1
+        assert body["activo"] is False
+
+    def test_patch_with_missing_id_returns_404(self, client, session, auth_headers):
+        """404 + route-level detail (NOT FastAPI's router 404)."""
+        resp = client.patch(
+            "/gallery/9999", json={"alt_text": "x"}, headers=auth_headers,
+        )
+        assert resp.status_code == 404
+        assert "GalleryItem" in resp.json().get("detail", "")
+
+    def test_patch_without_auth_returns_401(self, client, session):
+        """No auth -> 401."""
+        item = self._seed_item(session)
+        resp = client.patch(f"/gallery/{item.id}", json={"alt_text": "x"})
+        assert resp.status_code == 401
+
+
+class TestGalleryAdminDelete:
+    """REQ-HMG-022: DELETE /gallery/{id} is a hard delete returning 204."""
+
+    def _seed_item(self, session, **overrides) -> GalleryItem:
+        defaults = dict(
+            orden=1, image_url="https://example.com/seed.jpg",
+            alt_text="Seed", activo=False,
+        )
+        defaults.update(overrides)
+        item = GalleryItem(**defaults)
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+    def test_delete_returns_204(self, client, session, auth_headers):
+        """204 + empty body. The actual row removal is verified in
+        test_deleted_slot_removed_from_get (the session fixture caches
+        the item in its identity map, so a direct session.get would
+        lie)."""
+        item = self._seed_item(session)
+        resp = client.delete(f"/gallery/{item.id}", headers=auth_headers)
+        assert resp.status_code == 204
+        assert resp.text == ""
+
+    def test_delete_with_missing_id_returns_404(self, client, session, auth_headers):
+        """404 + route-level detail."""
+        resp = client.delete("/gallery/9999", headers=auth_headers)
+        assert resp.status_code == 404
+        assert "GalleryItem" in resp.json().get("detail", "")
+
+    def test_deleted_slot_removed_from_get(self, client, session, auth_headers):
+        """After DELETE, GET /gallery no longer includes the slot."""
+        item = self._seed_item(session)
+        before = client.get("/gallery").json()
+        assert any(i["id"] == item.id for i in before)
+        resp = client.delete(f"/gallery/{item.id}", headers=auth_headers)
+        assert resp.status_code == 204
+        after = client.get("/gallery").json()
+        assert not any(i["id"] == item.id for i in after)
+
+
+# ── R12 verification gate ──────────────────────────────────────────────────
+# The HttpUrl trailing-slash wire-format quirk (Pydantic v2 appends / to
+# bare hostnames). The mitigation: HttpUrl on the wire (Create/Update) is
+# coerced to str for storage; the stored str is returned by Read. The
+# round-trip below asserts the admin's raw input (no trailing slash) is
+# stored unchanged and returned unchanged on GET.
+
+
+class TestGalleryR12TrailingSlash:
+    """R12 verification: the admin's URL (e.g. https://example.com with no
+    trailing slash) must round-trip through POST + GET unchanged."""
+
+    def test_url_without_trailing_slash_round_trips_unchanged(
+        self, client, session, auth_headers
+    ):
+        resp = client.post(
+            "/gallery",
+            json={
+                "orden": 1,
+                "image_url": "https://example.com",  # NO trailing slash
+                "alt_text": "Bare host",
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
+        assert resp.json()["image_url"] == "https://example.com", (
+            f"Expected exact round-trip, got {resp.json()['image_url']!r}"
+        )
+        # And GET /gallery returns the same exact string.
+        get_resp = client.get("/gallery")
+        assert get_resp.json()[0]["image_url"] == "https://example.com"
+
+
 # ── W1.2: Schema validation (RED → GREEN) ───────────────────────────────────
 #
 # These tests exercise the Pydantic schemas ONLY — no DB, no HTTP. They run
