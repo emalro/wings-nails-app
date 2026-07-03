@@ -448,6 +448,24 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
 - **Riesgo residual**: Ninguno en el flujo. El SDD formal `home-static-sections` PR 4 va a refactorizar el navbar a `frontend/src/components/layout/Navbar.tsx`; ese refactor absorbe este cambio sin conflicto (solo tiene que importar `<img>` en vez de `<GiAngelWings />`). Si la usuaria quiere ajustar el logo (color, contraste, diferentes tamaños) en una segunda iteración, este hotfix queda como baseline.
 - **Pendiente de documentación SDD**: Este hotfix se va a referenciar desde el PR 4 del change `home-static-sections` cuando se ejecute — el PR puede omitir la parte de "emit binary assets" y empezar directamente desde "feat(sdd): extract Navbar.tsx".
 
+### 2026-07-03 — Admin FE: GallerySection + hooks + Admin wiring (PR 3 de `home-static-sections`)
+
+- **Tipo**: Nueva funcionalidad
+- **Descripción**: PR 3 del change `home-static-sections` — agrega la sección de administración de galería al panel admin. Incluye:
+  - `frontend/src/api.ts`: tipos `GalleryItemRead`, `GalleryItemCreate`, `GalleryItemUpdate` + funciones CRUD (`getGallery`, `createGalleryItem`, `updateGalleryItem`, `deleteGalleryItem`).
+  - `frontend/src/hooks/useGallery.ts`: hook público `useGallery` + 3 mutaciones admin (`useCreateGalleryItem`, `useUpdateGalleryItem`, `useDeleteGalleryItem`).
+  - `frontend/src/components/admin/GallerySection.tsx`: componente autocontenido con 6 editores de slot (preview thumbnail con debounce, validación de alt_text, toggle activo, guardar/eliminar). Formulario de creación que auto-detecta el próximo orden libre y se deshabilita cuando los 6 slots están ocupados.
+  - `frontend/src/pages/Admin.tsx`: sección "Galería de Trabajos" como collapsible `<details>` entre Servicios y Configuración del negocio, con estado persistido en `localStorage`.
+- **Archivos afectados**: `frontend/src/api.ts` (+49), `frontend/src/hooks/useGallery.ts` (NEW, +45), `frontend/src/hooks/index.ts` (+1), `frontend/src/components/admin/GallerySection.tsx` (NEW, ~370), `frontend/src/pages/Admin.tsx` (+35)
+- **Requisitos relacionados**: REQ-HGAL-051 (admin gallery CRUD), REQ-HGAL-052 (6-slot grid admin)
+- **Motivo**: Implementar la administración de la galería de trabajos para que el admin pueda cargar, editar y eliminar imágenes de la galería pública.
+- **Impacto esperado**: El admin puede gestionar los 6 slots de la galería desde el panel, con preview thumbnail, validación de alt_text, y toggle de activo/inactivo. La galería pública refleja los cambios al recargar.
+- **Decisiones técnicas**:
+  - GallerySection es autocontenido: acepta objetos de mutación tipados en vez de funciones handler, eliminando prop-drilling y permitiendo que el componente maneje su propio estado de mensajes.
+  - El formulario de creación calcula `nextFreeOrden` dinámicamente y se deshabilita cuando todos los slots están ocupados.
+  - El debounce de preview thumbnail usa 300ms para evitar requests excesivos mientras el admin pega URLs.
+- **Riesgo residual**: Ninguno. El componente es independiente de PR 2 (sección pública) y funciona con los endpoints de PR 1 (backend).
+
 ### 2026-07-03 — Brand shell: Navbar extraction + logo bump (PR 4 de `home-static-sections`)
 
 - **Tipo**: Mejora (UI/brand shell)
@@ -455,7 +473,7 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
   - `frontend/src/components/layout/Navbar.tsx` (NEW, ~150 LOC): componente autocontenido que maneja navbar, drawer móvil, focus trap, y auth-loading skeleton.
   - `frontend/src/App.tsx` (de 260 a ~120 LOC): reemplaza el bloque inline del navbar con `<Navbar />`, mantiene `isDesktop` state para el WhatsApp FAB.
   - Logo bump: `width={36} height={36}` → `width={48} height={48}` en el `<img>` y `.navbar-brand-logo` CSS.
-- **Archivos afectados**: `frontend/src/components/layout/Navbar.tsx` (NEW, ~150), `frontend/src/App.tsx` (-140 net), `frontend/src/index.css` (+0 net,尺寸 change)
+- **Archivos afectados**: `frontend/src/components/layout/Navbar.tsx` (NEW, ~150), `frontend/src/App.tsx` (-140 net), `frontend/src/index.css` (+0 net, change)
 - **Requisitos relacionados**: REQ §2.A.4 (brand shell), R14 (auth-loading skeleton mitigation)
 - **Motivo**: El navbar estaba inline en App.tsx (100+ LOC), dificultando mantenimiento y testability. La extracción a componente separado mejora la separación de responsabilidades. El logo se aumentó de 36×36 a 48×48 (33% más grande) para mejor visibilidad en la marca.
 - **Impacto esperado**: Navbar renderiza idénticamente al pre-refactor (sin regresión visual), aparte del logo más grande. El auth-loading skeleton se renderiza via `<Navbar isLoading />`. El mobile drawer focus trap funciona correctamente.
