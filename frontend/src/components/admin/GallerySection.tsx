@@ -45,6 +45,7 @@ export default function GallerySection({
   const [slotErrors, setSlotErrors] = useState<Record<number, string>>({})
   const previewImgRefs = useRef<Record<number, HTMLImageElement | null>>({})
   const [galleryMessage, setGalleryMessage] = useState<string | null>(null)
+  const [createForm, setCreateForm] = useState({ image_url: '', alt_text: '', link_url: '' })
   // Debounced fetch for thumbnail
   const fetchPreview = React.useCallback(
     debounce(async (url: string, orden: number) => {
@@ -90,8 +91,6 @@ export default function GallerySection({
       activo: true,
     }
   }
-
-  const slot = getSlot(1) // For create form, use slot 1 as template
 
   function handleImageUrlChange(orden: number, value: string) {
     const slotData = getSlot(orden)
@@ -155,21 +154,26 @@ export default function GallerySection({
 
   function handleCreateSlot(e: React.FormEvent) {
     e.preventDefault()
+    if (nextFreeOrden === null) return
     setGalleryMessage(null)
     const payload: GalleryItemCreate = {
-      orden: slot.orden,
-      image_url: slot.image_url,
-      alt_text: slot.alt_text,
-      link_url: slot.link_url || null,
-      activo: slot.activo,
+      orden: nextFreeOrden,
+      image_url: createForm.image_url,
+      alt_text: createForm.alt_text,
+      link_url: createForm.link_url || null,
+      activo: true,
     }
     createGalleryMutation.mutate(payload, {
-      onSuccess: () => setGalleryMessage('Item agregado a la galería.'),
+      onSuccess: () => {
+        setGalleryMessage('Item agregado a la galería.')
+        setCreateForm({ image_url: '', alt_text: '', link_url: '' })
+      },
       onError: () => setGalleryMessage('Error al crear item.'),
     })
   }
 
   const slots = Array.from({ length: SLOT_COUNT }, (_, i) => i + 1)
+  const nextFreeOrden = slots.find((orden) => !gallery.some((g) => g.orden === orden)) ?? null
 
   return (
     <div className="admin-grid">
@@ -180,10 +184,7 @@ export default function GallerySection({
             Orden (1-6)
             <input
               type="number"
-              value={slot.orden}
-              onChange={e => {}}
-              min={1}
-              max={6}
+              value={nextFreeOrden ?? ''}
               readOnly
               style={{ background: 'var(--surface-container)', cursor: 'not-allowed' }}
             />
@@ -191,8 +192,8 @@ export default function GallerySection({
           <label>
             URL de imagen
             <input
-              value={slot.image_url}
-              onChange={e => {}}
+              value={createForm.image_url}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, image_url: e.target.value }))}
               placeholder="https://..."
               required
             />
@@ -200,16 +201,16 @@ export default function GallerySection({
           <label>
             Texto alternativo <span aria-hidden="true">*</span>
             <input
-              value={slot.alt_text}
-              onChange={e => {}}
+              value={createForm.alt_text}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, alt_text: e.target.value }))}
               required
             />
           </label>
           <label>
             URL de enlace (opcional)
             <input
-              value={slot.link_url}
-              onChange={e => {}}
+              value={createForm.link_url}
+              onChange={(e) => setCreateForm((prev) => ({ ...prev, link_url: e.target.value }))}
               placeholder="https://..."
             />
           </label>
@@ -217,8 +218,12 @@ export default function GallerySection({
             <input type="checkbox" defaultChecked={true} readOnly />
             Activo
           </label>
-          <button className="button-primary" type="submit" disabled={createGalleryMutation.isPending}>
-            {createGalleryMutation.isPending ? 'Creando...' : 'Agregar a galería'}
+          <button
+            className="button-primary"
+            type="submit"
+            disabled={createGalleryMutation.isPending || nextFreeOrden === null || createForm.alt_text.trim() === ''}
+          >
+            {createGalleryMutation.isPending ? 'Creando...' : nextFreeOrden === null ? 'Slots completos' : 'Agregar a galería'}
           </button>
         </form>
       </div>
