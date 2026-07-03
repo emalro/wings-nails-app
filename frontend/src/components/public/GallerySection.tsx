@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { useGallery, type GalleryItemRead } from '../../hooks'
+import { useGallery } from '../../hooks'
+import { type GalleryItemRead } from '../../api'
 import { Lightbox } from './Lightbox'
 
 export function GallerySection() {
