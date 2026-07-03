@@ -189,7 +189,7 @@
   .navbar-inner { max-width: var(--content-max); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; height: 68px; }
   .navbar-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; color: var(--on-background); }
   .navbar-brand:hover { color: var(--on-background); }
-  .navbar-brand-logo { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--tertiary)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.1rem; font-weight: 700; flex-shrink: 0; }
+  .navbar-brand-logo { width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--tertiary)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.1rem; font-weight: 700; flex-shrink: 0; }
   .navbar-links { display: flex; align-items: center; gap: 6px; }
   .navbar-links a, .navbar-links button { background: none; border: none; padding: 8px 14px; border-radius: var(--radius-sm); color: var(--on-surface-variant); font-weight: 500; font-size: .9rem; transition: all .2s; }
   .navbar-links a:hover, .navbar-links button:hover { color: var(--primary); background: var(--primary-container); }

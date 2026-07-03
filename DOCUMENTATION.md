@@ -465,3 +465,21 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
   - El formulario de creación calcula `nextFreeOrden` dinámicamente y se deshabilita cuando todos los slots están ocupados.
   - El debounce de preview thumbnail usa 300ms para evitar requests excesivos mientras el admin pega URLs.
 - **Riesgo residual**: Ninguno. El componente es independiente de PR 2 (sección pública) y funciona con los endpoints de PR 1 (backend).
+
+### 2026-07-03 — Brand shell: Navbar extraction + logo bump (PR 4 de `home-static-sections`)
+
+- **Tipo**: Mejora (UI/brand shell)
+- **Descripción**: PR 4 del change `home-static-sections` — extrae el navbar de App.tsx a un componente independiente y aumenta el logo de 36×36 a 48×48.
+  - `frontend/src/components/layout/Navbar.tsx` (NEW, ~150 LOC): componente autocontenido que maneja navbar, drawer móvil, focus trap, y auth-loading skeleton.
+  - `frontend/src/App.tsx` (de 260 a ~120 LOC): reemplaza el bloque inline del navbar con `<Navbar />`, mantiene `isDesktop` state para el WhatsApp FAB.
+  - Logo bump: `width={36} height={36}` → `width={48} height={48}` en el `<img>` y `.navbar-brand-logo` CSS.
+- **Archivos afectados**: `frontend/src/components/layout/Navbar.tsx` (NEW, ~150), `frontend/src/App.tsx` (-140 net), `frontend/src/index.css` (+0 net, change)
+- **Requisitos relacionados**: REQ §2.A.4 (brand shell), R14 (auth-loading skeleton mitigation)
+- **Motivo**: El navbar estaba inline en App.tsx (100+ LOC), dificultando mantenimiento y testability. La extracción a componente separado mejora la separación de responsabilidades. El logo se aumentó de 36×36 a 48×48 (33% más grande) para mejor visibilidad en la marca.
+- **Impacto esperado**: Navbar renderiza idénticamente al pre-refactor (sin regresión visual), aparte del logo más grande. El auth-loading skeleton se renderiza via `<Navbar isLoading />`. El mobile drawer focus trap funciona correctamente.
+- **Decisiones técnicas**:
+  - Navbar es autocontenido: maneja su propio `mobileOpen` state, refs, y focus trap effect. App.tsx solo pasa props (`isDesktop`, `isAuthenticated`, `businessName`, URLs).
+  - El `isDesktop` state queda en App.tsx porque es compartido por Navbar y el WhatsApp FAB.
+  - El auth-loading skeleton se simplificó de 18 LOC inline a 7 LOC con `<Navbar isLoading />`.
+  - Logo 48×48 = 2.4x retina para display 48px. El render queda crisp en HiDPI sin penalizar bundle.
+- **Riesgo residual**: Ninguno. El navbar extraído es funcionalmente equivalente al inline. El logo más grande no causa layout shift porque `.navbar-brand-logo` ya tenía `flex-shrink: 0`.
