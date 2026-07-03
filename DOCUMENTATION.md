@@ -1,6 +1,6 @@
 # DOCUMENTATION.md
 
-> Última actualización: 29/06/2026
+> Última actualización: 03/07/2026
 
 ## Propósito
 Este documento captura el historial de cambios, decisiones de diseño y consideraciones de implementación del proyecto. Debe ser usado como el registro oficial del agente para documentar cada intervención.
@@ -427,3 +427,23 @@ Impacto esperado: Mejora de la trazabilidad y mayor disciplina en el proceso de 
   - Padding de 1h antes del primer turno y después del último: evita que los eventos queden pegados al borde superior/inferior del grid.
   - Si no hay turnos en la vista, vuelve a apertura/cierre (no acota a un solo día si la semana entera está vacía).
 - **Riesgo residual**: Si hay un turno a las 23:00 y el cierre es a las 18:00, el `max` se va a 24:00 (porque el turno + 1h padding se extiende más allá del cierre). Esto es intencional — el admin necesita ver el turno aunque caiga fuera del horario comercial. Si el horario flexible se vuelve un problema, se puede ajustar el padding o agregar un cap explícito.
+
+### 2026-07-03 — Hotfix: brand shell (logo + favicons) [precursor de `home-static-sections` PR 4]
+
+- **Tipo**: Mejora (UI/brand shell)
+- **Descripción**: Hotfix para wirear el logo Victorian en el navbar y agregar favicons. Es una extracción parcial del PR 4 del SDD change `home-static-sections` (que sigue en fase `propose`/`spec`). El alcance de este hotfix es solo brand shell — no toca el refactor a `Navbar.tsx` ni la Home estática. Esos quedan en el SDD formal.
+  - Optimización del logo fuente `static/assets/Gold Vintage Victorian Romantic Frame Wedding Monogram Logo.png` (3.6 MB, 2000×2000 RGB) a `frontend/public/logo.png` (96×96, 6.3 KB, palette 64 colores, LANCZOS + median-cut quantize).
+  - Generación de set de favicons: `favicon.ico` (multi-res 16/32/48, 0.4 KB), `favicon-32x32.png` (32×32, 0.8 KB), `apple-touch-icon.png` (180×180, 24.3 KB). Total `frontend/public/`: 31.8 KB (target <100 KB).
+  - Swap del icono de navbar: `<span><GiAngelWings /></span>` → `<img src="/logo.png" alt={businessName} width={36} height={36} className="navbar-brand-logo" />` en `App.tsx:113`. Removido el import de `GiAngelWings` (sin otros usos en el frontend).
+  - `frontend/index.html` head: 3 nuevos `<link rel="icon">` / `apple-touch-icon` después de `theme-color`, antes de `<title>`. Orden: 32×32 PNG → ICO legacy → 180×180 apple-touch.
+- **Archivos afectados**: `frontend/src/App.tsx` (1 import removido, 1 JSX swapeado), `frontend/index.html` (+3 link tags), `frontend/public/{logo.png, favicon.ico, favicon-32x32.png, apple-touch-icon.png}` (NEW binarios). Source `static/assets/Gold...Logo.png` se conserva como asset de referencia.
+- **Requisitos relacionados**: REQ §2.A.4 (sección Trabajos Realizados) se referencia indirectamente; ningún requisito nuevo. Limpia el pendiente de favicon y logo que arrastraba la marca.
+- **Motivo**: El asset ya estaba en el repo y la marca necesitaba favicon (Lighthouse penalty en "Properly defines `<link rel='icon'>`") + el logo era un ícono genérico. Como el SDD formal va a tardar, se hace este hotfix chico para tener la marca en producción mientras tanto. Es totalmente compatible con PR 4 del SDD — no hay overlap de archivos con los otros PRs (1, 2, 3).
+- **Impacto esperado**: Navbar muestra el logo Victorian dorado (cream + filigree gold) en un círculo de 36×36, idéntico al tamaño del ícono anterior. El favicon aparece en el tab del navegador y el bookmark. Apple touch icon aparece al agregar a home screen en iOS.
+- **Decisiones técnicas**:
+  - Cream background (248, 244, 238) se preservó opaco (no se removió a transparente) — coincide casi exacto con el `var(--surface)` de la página (FDF8FA), por lo que el logo se ve continuo con el fondo. El filigree gold queda legible sin destruir detalle. Threshold agresivo habría erosionado el oro (B≈238 en el cream vs B en el gold es cercano).
+  - 96×96 para el navbar logo es 2x retina para 36×36 (display CSS). El render queda crisp en pantallas HiDPI sin penalizar el bundle.
+  - `favicon.ico` multi-res (16/32/48 en un solo archivo) cubre browsers legacy + modernos. El link tag con `sizes="32x32"` y `type="image/png"` viene primero para que Chrome/Firefox modernos prefieran el PNG sobre el ICO.
+  - El `<img>` recibió la clase `navbar-brand-logo` directamente (en vez de seguir anidado en un `<span>`). El `border-radius: 50%` de la clase recorta el logo a círculo, dando un look de "sello Victorian" consistente con el gradiente preexistente (que queda oculto detrás del logo opaco).
+- **Riesgo residual**: Ninguno en el flujo. El SDD formal `home-static-sections` PR 4 va a refactorizar el navbar a `frontend/src/components/layout/Navbar.tsx`; ese refactor absorbe este cambio sin conflicto (solo tiene que importar `<img>` en vez de `<GiAngelWings />`). Si la usuaria quiere ajustar el logo (color, contraste, diferentes tamaños) en una segunda iteración, este hotfix queda como baseline.
+- **Pendiente de documentación SDD**: Este hotfix se va a referenciar desde el PR 4 del change `home-static-sections` cuando se ejecute — el PR puede omitir la parte de "emit binary assets" y empezar directamente desde "feat(sdd): extract Navbar.tsx".

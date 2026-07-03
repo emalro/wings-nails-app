@@ -7,7 +7,6 @@ import SkipLink from './components/SkipLink'
 import ScrollToTop from './components/ScrollToTop'
 import { FaWhatsapp, FaInstagram, FaFacebook, FaAddressBook, FaBars, FaTimes } from "react-icons/fa";
 import { isContactUrl } from "./lib/contactLinks";
-import { GiAngelWings } from "react-icons/gi";
 
 
 function whatsappUrl(number: string): string {
@@ -111,7 +110,7 @@ export default function App() {
       <nav className="navbar">
         <div className="navbar-inner">
           <Link to="/" className="navbar-brand">
-            <span className="navbar-brand-logo"><GiAngelWings /></span>
+            <img src="/logo.png" alt={businessName} width={36} height={36} className="navbar-brand-logo" />
             {businessName}
           </Link>
 
