@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getGallery, createGalleryItem, updateGalleryItem, deleteGalleryItem, type GalleryItemRead, type GalleryItemCreate, type GalleryItemUpdate } from '../api'
 
-// Public read hook
+/**
+ * Public gallery read hook.
+ * Returns all 6 slots (active + inactive) ordered by `orden` ASC.
+ * The frontend filters for `activo === true` when rendering.
+ */
 export function useGallery() {
   return useQuery({
     queryKey: ['gallery'],
@@ -43,3 +47,5 @@ export function useDeleteGalleryItem() {
     },
   })
 }
+
+export type { GalleryItemRead }

@@ -16,6 +16,7 @@ Incluye la organización de componentes, las relaciones entre módulos, el model
 - **Datos**: estructura de dominio que soporta clientes, servicios, citas, horarios, excepciones y configuración del negocio.
 - **Procesos automatizados**: vencimientos, alertas y conciliación de pagos (pendiente de implementar).
 - **Integraciones de experiencia**: mapas de ubicación, notificaciones y envío de comprobantes (pendiente de implementar).
+- **Contenido estático del Home (home-static-content)**: secciones informativas de la landing page gestionadas desde administración — Sobre mí, Cómo reservar, Testimonios, FAQ — con contenido editable (texto, imágenes, orden, estado activo) que se renderiza públicamente sin lógica de negocio compleja.
 
 ## Modelo de dominio
 - `Clientas`: datos de contacto (`nombre`, `apellido`, `teléfono`), historial de turnos tomados, abonados y cancelados. Cuenta con índice de búsqueda para autocompletado predictivo.

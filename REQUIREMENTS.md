@@ -38,10 +38,14 @@ La página de inicio (/) actuará como la vitrina del negocio y estará estructu
     *   Dinamismo: Los enlaces de las tres redes sociales y el nombre/logo del emprendimiento deben consumirse dinámicamente desde las variables configuradas en el Panel Administrador.
 2.  *Sección de Introducción:* Bloque principal (Hero Section) con una imagen estética de fondo, título de bienvenida y una breve descripción introductoria de la propuesta de valor del estudio de uñas.
 3.  *Sección de Servicios:* Despliegue automatizado del catálogo en formato de *Cards (Tarjetas)*. Cada tarjeta mostrará el Nombre del Servicio, Duración, Precio, Monto de la Seña y Descripción. Solo se renderizarán los servicios que tengan el estado activo: True.
-4.  *Sección de Trabajos Realizados (Carrusel):* Slider de imágenes interactivo y responsive que permitirá visualizar fotos de diseños y trabajos previos realizados por la manicurista.
-5.  *Sección Call To Action (CTA):* Bloque visual de alto contraste con el texto principal: "¿Necesitás hacerte las uñas?" acompañado de un botón de gran tamaño que redirija directamente al flujo de reserva de turnos.
-6.  *Sección de Ubicación:* Contenedor que renderiza un minimapa embebido de Google Maps. La dirección de origen utilizada para cargar el mapa debe ser configurable por la manicurista desde el Panel de Administración.
-7.  *Footer (Pie de Página):* Estructura de una sola línea con distribución horizontal:
+4.  *Sección de Trabajos Realizados (Grid de 6):* Grid de 6 imágenes con lightbox y links opcionales que permitirá visualizar fotos de diseños y trabajos previos realizados por la manicurista.
+5.  *✅ Sección Sobre mí:* Bloque con foto de la manicurista, nombre, breve biografía profesional y años de experiencia. Contenido editable desde el panel de administración.
+6.  *✅ Sección Cómo reservar:* Guía visual paso a paso (3-4 pasos) explicando el flujo de reserva online: elegir servicio → elegir fecha/hora → completar datos → pagar seña. Incluye íconos ilustrativos.
+7.  *✅ Sección Testimonios:* Carrusel de testimonios de clientas (nombre, foto opcional, texto, calificación 5 estrellas). Máximo 10 testimonios, orden configurable, solo activos se muestran.
+8.  *✅ Sección FAQ:* Lista de preguntas frecuentes con acordeón expandible. Pregunta y respuesta editables desde admin. Máximo 15 FAQs, solo activas se renderizan.
+9.  *Sección Call To Action (CTA):* Bloque visual de alto contraste con el texto principal: "¿Necesitás hacerte las uñas?" acompañado de un botón de gran tamaño que redirija directamente al flujo de reserva de turnos.
+10. *Sección de Ubicación:* Contenedor que renderiza un minimapa embebido de Google Maps. La dirección de origen utilizada para cargar el mapa debe ser configurable por la manicurista desde el Panel de Administración.
+11. *Footer (Pie de Página):* Estructura de una sola línea con distribución horizontal:
     *   Alineado a la Izquierda: Texto con formato estricto: © — 2026 [Nombre del Emprendimiento] Rosario, Santa Fe. (El año se calcula dinámicamente según la fecha actual del sistema).
     *   Alineado a la Derecha: Accesos directos a los canales de contacto representados *únicamente por sus íconos visuales* (WhatsApp, Instagram, Facebook), sin textos adjuntos.
 
