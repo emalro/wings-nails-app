@@ -79,5 +79,7 @@ export default function FaqSection() {
             </details>
           ))}
         </div>
-      </div    )
+      </div>
+    </section>
+  )
 }
