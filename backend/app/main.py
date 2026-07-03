@@ -19,7 +19,7 @@ from .auth import create_access_token, create_refresh_token, verify_token, verif
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
 from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario, GalleryItem
-from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse, GalleryItemRead
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse, GalleryItemRead, GalleryItemCreate, GalleryItemUpdate
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 # COOKIE_SECURE defaults to TRUE so production cookies always carry the
@@ -1007,8 +1007,7 @@ def list_services(all: bool = False, session: Session = Depends(get_session)):
 
 
 # ── home-gallery endpoints (REQ-HMG-001..022) ──────────────────────────────
-# Public read + 3 admin CRUD. Same posture as /services: public GET, admin
-# mutations behind get_current_user. The 3 admin endpoints land in W1.4-W1.5.
+# Public read + 3 admin CRUD. The admin endpoints sit below get_current_user.
 
 
 @app.get("/gallery", response_model=list[GalleryItemRead])
@@ -1019,6 +1018,50 @@ def list_gallery(session: Session = Depends(get_session)):
         select(GalleryItem).order_by(GalleryItem.orden.asc())
     ).all()
     return items
+
+
+def _check_orden_conflict(
+    session: Session, orden: int, exclude_id: int | None = None
+) -> None:
+    """R13: enforce orden uniqueness only between active rows (partial
+    unique index not portable to SQLite; see design §3.5). PATCH uses
+    `exclude_id` so an item can keep its own orden when other fields
+    change."""
+    stmt = select(GalleryItem).where(
+        GalleryItem.orden == orden,
+        GalleryItem.activo == True,
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(GalleryItem.id != exclude_id)
+    existing = session.exec(stmt).first()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"orden_conflict: ya existe un slot activo con orden={orden}",
+        )
+
+
+@app.post("/gallery", response_model=GalleryItemRead, status_code=201)
+def create_gallery_item(
+    payload: GalleryItemCreate,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: create one gallery slot. HttpUrl -> str coercion for
+    storage prevents Pydantic v2's trailing-slash quirk (R12) from
+    mangling the admin's input on read."""
+    _check_orden_conflict(session, payload.orden)
+    item = GalleryItem(
+        orden=payload.orden,
+        image_url=str(payload.image_url),
+        alt_text=payload.alt_text,
+        link_url=str(payload.link_url) if payload.link_url is not None else None,
+        activo=payload.activo,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
 
 
 def calculate_duration_for_cita(cita: Cita, session: Session) -> int:
