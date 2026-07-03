@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useServices, useConfig } from '../hooks'
 import { isContactUrl } from '../lib/contactLinks'
 import { SkeletonLoader } from '../components/SkeletonLoader'
+import { GallerySection } from '../components/public/GallerySection'
 import type { Servicio } from '../api'
 
 export default function Home() {
@@ -21,6 +22,63 @@ export default function Home() {
   // services. The grid itself uses auto-fill, minmax(280px, 1fr) so the
   // number of services doesn't break the layout.
   const showBentoFeature = services.length >= 3
+
+  // Placeholder components for upcoming sections (W2.4, W2.5, W2.6)
+  function SobreMi() {
+    return (
+      <section className="section" aria-labelledby="sobre-mi-title">
+        <div className="content">
+          <div className="section-header">
+            <span className="overline">Sobre mí</span>
+            <h2 id="sobre-mi-title">Conocé a tu nail artist</h2>
+            <p>Próximamente: historia, formación y filosofía de trabajo.</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  function ComoReservar() {
+    return (
+      <section className="section section-alt" aria-labelledby="como-reservar-title">
+        <div className="content">
+          <div className="section-header">
+            <span className="overline">Cómo reservar</span>
+            <h2 id="como-reservar-title">Reservá tu turno en 3 pasos</h2>
+            <p>Próximamente: guía paso a paso para agendar tu turno online.</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  function Testimonios() {
+    return (
+      <section className="section" aria-labelledby="testimonios-title">
+        <div className="content">
+          <div className="section-header">
+            <span className="overline">Testimonios</span>
+            <h2 id="testimonios-title">Lo que dicen nuestras clientas</h2>
+            <p>Próximamente: reseñas y experiencias reales.</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  function FAQ() {
+    return (
+      <section className="section section-alt" aria-labelledby="faq-title">
+        <div className="content">
+          <div className="section-header">
+            <span className="overline">FAQ</span>
+            <h2 id="faq-title">Preguntas frecuentes</h2>
+            <p>Próximamente: respuestas a las dudas más frecuentes.</p>
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <>
@@ -104,6 +162,21 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      {/* W2.3 — Galería (REQ-VIS-GALLERY) */}
+      <GallerySection />
+
+      {/* W2.4 — Sobre mí (placeholder) */}
+      <SobreMi />
+
+      {/* W2.5 — Cómo reservar (placeholder) */}
+      <ComoReservar />
+
+      {/* W2.6 — Testimonios (placeholder) */}
+      <Testimonios />
+
+      {/* W2.7 — FAQ (placeholder) */}
+      <FAQ />
 
       {/* REQ-VIS-006: Conectemos section — WhatsApp rose chip + Instagram
           lavender chip + Facebook rose-variant chip + address. */}
