@@ -6,6 +6,8 @@ import { SkeletonLoader } from '../components/SkeletonLoader'
 import { GallerySection } from '../components/public/GallerySection'
 import AboutMeSection from '../components/public/AboutMeSection'
 import HowToBookSection from '../components/public/HowToBookSection'
+import TestimonialsSection from '../components/public/TestimonialsSection'
+import FaqSection from '../components/public/FaqSection'
 import type { Servicio } from '../api'
 
 export default function Home() {
@@ -160,11 +162,11 @@ export default function Home() {
       {/* W2.5 — Cómo reservar */}
       <HowToBookSection />
 
-      {/* W2.6 — Testimonios (placeholder) */}
-      <Testimonios />
+      {/* W2.6 — Testimonios */}
+      <TestimonialsSection />
 
-      {/* W2.7 — FAQ (placeholder) */}
-      <FAQ />
+      {/* W2.6 — FAQ */}
+      <FaqSection />
 
       {/* REQ-VIS-006: Conectemos section — WhatsApp rose chip + Instagram
           lavender chip + Facebook rose-variant chip + address. */}
