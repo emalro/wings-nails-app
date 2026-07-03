@@ -476,8 +476,7 @@ export async function createPublicAppointment(
   return r.data
 }
 
-// ── Gallery API (public read) ──────────────────────────────────────────────
-// Added in PR 2 (home-static-sections)
+// ── Gallery Types ────────────────────────────────────────────────────────
 
 export type GalleryItemRead = {
   id: number
@@ -490,7 +489,38 @@ export type GalleryItemRead = {
   updated_at: string
 }
 
+export type GalleryItemCreate = {
+  orden: number
+  image_url: string
+  alt_text: string
+  link_url?: string | null
+  activo?: boolean
+}
+
+export type GalleryItemUpdate = {
+  image_url?: string
+  alt_text?: string
+  link_url?: string | null
+  activo?: boolean
+}
+
+// ── Gallery API ──────────────────────────────────────────────────────────
+
 export async function getGallery(): Promise<GalleryItemRead[]> {
   const r = await api.get('/gallery')
   return r.data
+}
+
+export async function createGalleryItem(payload: GalleryItemCreate): Promise<GalleryItemRead> {
+  const r = await api.post('/gallery', payload)
+  return r.data
+}
+
+export async function updateGalleryItem(id: number, payload: GalleryItemUpdate): Promise<GalleryItemRead> {
+  const r = await api.patch(`/gallery/${id}`, payload)
+  return r.data
+}
+
+export async function deleteGalleryItem(id: number): Promise<void> {
+  await api.delete(`/gallery/${id}`)
 }
