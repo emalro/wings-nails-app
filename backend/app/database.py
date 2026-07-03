@@ -25,8 +25,11 @@ except Exception as e:
 
 
 def create_db_and_tables():
-    from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, HorarioSemanal, ExcepcionHorario, Usuario
+    from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, HorarioSemanal, ExcepcionHorario, Usuario, GalleryItem
 
+    # Non-destructive: CREATE TABLE IF NOT EXISTS for every model, so newly
+    # added table=True classes (e.g. GalleryItem) materialize on next
+    # startup with no manual migration. run_migration() handles ALTERs.
     SQLModel.metadata.create_all(engine)
 
 

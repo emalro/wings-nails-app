@@ -298,6 +298,62 @@ class TestGalleryR12TrailingSlash:
         assert get_resp.json()[0]["image_url"] == "https://example.com"
 
 
+# ── W1.6: seed_default_gallery (RED → GREEN) ───────────────────────────────
+# 3 cases per design §9 / REQ-HMG-001 seed scenario. The seed is
+# idempotent (no-op on a populated DB) and never overwrites existing data.
+
+
+class TestGallerySeed:
+    """REQ-HMG-001: seed_default_gallery creates 6 inactive rows with
+    orden=1..6 on first run. Idempotent: re-running on a populated DB
+    inserts 0 rows. Never overwrites existing data."""
+
+    def test_seed_creates_six_inactive_slots(self, session):
+        """First call creates exactly 6 rows with orden 1..6, all inactive."""
+        from app.main import seed_default_gallery
+        seed_default_gallery(session)
+        rows = session.exec(select(GalleryItem).order_by(GalleryItem.orden)).all()
+        assert len(rows) == 6, f"Expected 6 seeded rows, got {len(rows)}"
+        assert [r.orden for r in rows] == [1, 2, 3, 4, 5, 6]
+        for r in rows:
+            assert r.activo is False, f"Expected all inactive, got {r}"
+
+    def test_seed_is_idempotent_on_populated_db(self, session):
+        """Second call inserts 0 rows (the first-call guard sees existing
+        data and returns)."""
+        from app.main import seed_default_gallery
+        seed_default_gallery(session)
+        before = session.exec(select(GalleryItem)).all()
+        assert len(before) == 6
+
+        seed_default_gallery(session)
+        after = session.exec(select(GalleryItem)).all()
+        assert len(after) == 6, (
+            f"Seed should be idempotent — expected 6 rows after second call, got {len(after)}"
+        )
+
+    def test_seed_does_not_overwrite_existing_data(self, session):
+        """A non-empty DB with manually-inserted rows is left untouched by
+        the seed (the guard checks `first()`, not a count)."""
+        from app.main import seed_default_gallery
+        # Pre-existing row with a distinctive alt_text the seed would
+        # never produce (the seed uses model defaults: empty string).
+        session.add(GalleryItem(
+            orden=1, image_url="https://example.com/manual.jpg",
+            alt_text="Manual row", activo=True,
+        ))
+        session.commit()
+
+        seed_default_gallery(session)
+
+        rows = session.exec(select(GalleryItem).order_by(GalleryItem.orden)).all()
+        assert len(rows) == 1, (
+            f"Seed must not touch an existing row, got {len(rows)} rows"
+        )
+        assert rows[0].alt_text == "Manual row"
+        assert rows[0].activo is True
+
+
 # ── W1.2: Schema validation (RED → GREEN) ───────────────────────────────────
 #
 # These tests exercise the Pydantic schemas ONLY — no DB, no HTTP. They run

@@ -70,6 +70,24 @@ def seed_default_schedule(session: Session) -> None:
     session.commit()
 
 
+def seed_default_gallery(session: Session) -> None:
+    """Seed the 6 admin-configurable gallery slots on first run (REQ-HMG-001).
+
+    Idempotent: if any GalleryItem row already exists, this is a no-op.
+    Slots ship with `activo=False` and empty image_url/alt_text — the admin
+    fills them in via the panel before activating each slot (alt_text
+    is gated by min_length=1 in the Pydantic Create schema, so the seed
+    can use an empty string and the admin must provide a real value
+    before PATCH/POSTing activo=True).
+    """
+    existing = session.exec(select(GalleryItem)).first()
+    if existing:
+        return
+    for n in range(1, 7):
+        session.add(GalleryItem(orden=n))
+    session.commit()
+
+
 def has_column(session: Session, table_name: str, column_name: str) -> bool:
     """Check if a column exists in a table — works on both SQLite and PostgreSQL."""
     try:
@@ -171,7 +189,7 @@ def _validate_jwt_secret_key() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     _validate_jwt_secret_key()
     create_db_and_tables()
-    for fn in [run_migration, seed_default_config, seed_default_schedule, seed_admin_user]:
+    for fn in [run_migration, seed_default_config, seed_default_schedule, seed_default_gallery, seed_admin_user]:
         try:
             with Session(engine) as session:
                 fn(session)

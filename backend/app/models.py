@@ -123,8 +123,12 @@ class GalleryItem(SQLModel, table=True):
     __tablename__ = "galleryitem"
     id: Optional[int] = Field(default=None, primary_key=True)
     orden: int = Field(ge=1, le=6)
-    image_url: str = Field(max_length=2000)
-    alt_text: str = Field(min_length=1, max_length=200)
+    # image_url and alt_text default to "" so the seed pattern
+    # `GalleryItem(orden=n)` works (design §2.3). The Pydantic min_length=1
+    # on alt_text only fires for GalleryItemCreate/Update — ORM construction
+    # bypasses it. The admin must fill alt_text before activating the slot.
+    image_url: str = Field(default="", max_length=2000)
+    alt_text: str = Field(default="", min_length=1, max_length=200)
     link_url: Optional[str] = Field(default=None, max_length=2000)
     activo: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
