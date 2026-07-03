@@ -4,6 +4,7 @@ import { useServices, useConfig } from '../hooks'
 import { isContactUrl } from '../lib/contactLinks'
 import { SkeletonLoader } from '../components/SkeletonLoader'
 import { GallerySection } from '../components/public/GallerySection'
+import AboutMeSection from '../components/public/AboutMeSection'
 import type { Servicio } from '../api'
 
 export default function Home() {
@@ -166,8 +167,8 @@ export default function Home() {
       {/* W2.3 — Galería (REQ-VIS-GALLERY) */}
       <GallerySection />
 
-      {/* W2.4 — Sobre mí (placeholder) */}
-      <SobreMi />
+      {/* W2.4 — Sobre mí */}
+      <AboutMeSection />
 
       {/* W2.5 — Cómo reservar (placeholder) */}
       <ComoReservar />
