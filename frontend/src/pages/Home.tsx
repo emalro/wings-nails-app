@@ -5,6 +5,7 @@ import { isContactUrl } from '../lib/contactLinks'
 import { SkeletonLoader } from '../components/SkeletonLoader'
 import { GallerySection } from '../components/public/GallerySection'
 import AboutMeSection from '../components/public/AboutMeSection'
+import HowToBookSection from '../components/public/HowToBookSection'
 import type { Servicio } from '../api'
 
 export default function Home() {
@@ -33,20 +34,6 @@ export default function Home() {
             <span className="overline">Sobre mí</span>
             <h2 id="sobre-mi-title">Conocé a tu nail artist</h2>
             <p>Próximamente: historia, formación y filosofía de trabajo.</p>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  function ComoReservar() {
-    return (
-      <section className="section section-alt" aria-labelledby="como-reservar-title">
-        <div className="content">
-          <div className="section-header">
-            <span className="overline">Cómo reservar</span>
-            <h2 id="como-reservar-title">Reservá tu turno en 3 pasos</h2>
-            <p>Próximamente: guía paso a paso para agendar tu turno online.</p>
           </div>
         </div>
       </section>
@@ -170,8 +157,8 @@ export default function Home() {
       {/* W2.4 — Sobre mí */}
       <AboutMeSection />
 
-      {/* W2.5 — Cómo reservar (placeholder) */}
-      <ComoReservar />
+      {/* W2.5 — Cómo reservar */}
+      <HowToBookSection />
 
       {/* W2.6 — Testimonios (placeholder) */}
       <Testimonios />
