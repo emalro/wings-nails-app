@@ -3,10 +3,62 @@
 Strict TDD — every test in this file was written BEFORE the implementation
 it exercises. The 4 cases in TestGallerySchemas (W1.2) are pure Pydantic
 schema validation. The endpoint tests come in W1.3, W1.4, W1.5, W1.6.
+
+Env-var setup, schema creation, and the `client` / `session` fixtures live
+at module level so this file is self-contained: `pytest tests/test_gallery.py`
+works in isolation (without test_api.py's import-time setup having run).
+The full suite still works because test_api.py's own env-var assignments
+are setdefault-style idempotent.
 """
+
+import os
+
+# Env vars BEFORE any `app.*` import. Idempotent with test_api.py's setup.
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-jwt-32-chars-long!")
+os.environ.setdefault("LOGIN_RATE_LIMIT", "100/minute")
 
 import pytest
 from pydantic import ValidationError
+from sqlmodel import Session, delete, select
+
+from app.database import create_db_and_tables, engine
+from app.models import GalleryItem
+
+# Ensure schema exists. Idempotent. Mirrors test_api.py's import-time setup
+# but is scoped to this file so we don't depend on test_api.py being loaded.
+create_db_and_tables()
+
+
+@pytest.fixture
+def client():
+    """A fresh TestClient bound to the FastAPI app, per test."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    return TestClient(app, base_url="https://testserver")
+
+
+@pytest.fixture
+def session():
+    """A fresh SQLModel Session bound to the shared test engine, per test."""
+    s = Session(engine)
+    try:
+        yield s
+    finally:
+        s.close()
+
+
+@pytest.fixture(autouse=True)
+def _clear_gallery(session):
+    """Wipe the GalleryItem table before each gallery test.
+
+    Scoped to this file (autouse declared here, not in conftest.py) so the
+    existing 182 tests are not affected. W1.6's seed_default_gallery tests
+    are also safe under this fixture — the seed runs after the wipe.
+    """
+    session.exec(delete(GalleryItem))
+    session.commit()
+    yield
 
 
 # ── W1.2: Schema validation (RED → GREEN) ───────────────────────────────────
@@ -82,3 +134,78 @@ class TestGallerySchemas:
         assert upd.image_url is None
         assert upd.link_url is None
         assert upd.activo is None
+
+
+# ── W1.3: Public GET /gallery (RED → GREEN) ─────────────────────────────────
+#
+# These tests exercise the GET endpoint through TestClient. They run BEFORE
+# the endpoint is implemented — they fail with 404 on the first run, then
+# pass after main.py grows the route.
+
+
+class TestGalleryPublicGet:
+    """REQ-HMG-010: GET /gallery is public, returns up to 6 items ordered by
+    orden ASC. Inactive items are included (frontend filters).
+    """
+
+    def test_get_returns_six_items_ordered_by_orden(self, client, session):
+        """With 6 manually-inserted items, GET /gallery returns them
+        ordered by `orden` ASC (1, 2, 3, 4, 5, 6)."""
+        for n in range(1, 7):
+            session.add(GalleryItem(
+                orden=n,
+                image_url=f"https://example.com/{n}.jpg",
+                alt_text=f"Slot {n}",
+                activo=False,
+            ))
+        session.commit()
+
+        r = client.get("/gallery")
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) == 6
+        orden_values = [item["orden"] for item in items]
+        assert orden_values == [1, 2, 3, 4, 5, 6], (
+            f"Expected orden ASC, got {orden_values}"
+        )
+
+    def test_get_returns_empty_list_when_table_empty(self, client, session):
+        """With no items in the gallery table, GET /gallery returns 200 with []."""
+        # The _clear_gallery autouse fixture has already wiped the table.
+        existing = session.exec(select(GalleryItem)).all()
+        assert existing == [], (
+            f"Test DB should start empty for this case, found {existing}"
+        )
+
+        r = client.get("/gallery")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_get_does_not_require_auth(self, client, session):
+        """GET /gallery is unauthenticated — no Authorization header, no cookie.
+        Returns 200 even when no items exist (empty list is fine)."""
+        r = client.get("/gallery")
+        assert r.status_code == 200, (
+            f"Expected 200 for unauthenticated GET, got {r.status_code}: {r.text}"
+        )
+
+    def test_get_includes_inactive_items(self, client, session):
+        """Inactive items (activo=False) are returned. The public frontend
+        decides what to render; the backend does not filter by activo."""
+        for n in range(1, 7):
+            session.add(GalleryItem(
+                orden=n,
+                image_url=f"https://example.com/{n}.jpg",
+                alt_text=f"Slot {n}",
+                activo=False,
+            ))
+        session.commit()
+
+        r = client.get("/gallery")
+        assert r.status_code == 200
+        items = r.json()
+        assert len(items) == 6
+        for item in items:
+            assert item["activo"] is False, (
+                f"Expected all items to be inactive, got {item}"
+            )
