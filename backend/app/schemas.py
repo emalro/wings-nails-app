@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_serializer, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from .models import EstadoCita
 
@@ -399,3 +399,55 @@ class PublicAppointmentResponse(BaseModel):
     id: int
     fecha_hora_cita: datetime
     estado_cita: EstadoCita  # always "Pendiente" — hardcoded by the route (REQ-PUB-004)
+
+
+# ── home-gallery schemas (REQ-HMG-001..022) ─────────────────────────────────
+#
+# 3 schemas, not 4: Read + Create + Update. The "missing" 4th is a deliberate
+# omission — there is no List/CreateWithImage/Upload/Replace schema. The admin
+# pastes external URLs (REQ-HMG-051), there is no file-upload endpoint.
+#
+# Wire-format quirk note (R12): image_url and link_url use HttpUrl on Create /
+# Update for the strict input validation (rejects file://, javascript:, data:,
+# empty string, anything without a scheme). The ORM column is `str`, NOT
+# HttpUrl — Pydantic v2's HttpUrl serializer appends a trailing slash on
+# bare-hostnames (https://example.com → https://example.com/), which would
+# mangle the admin's input on round-trip. By keeping the column as `str`, the
+# stored value is the raw admin input and GalleryItemRead returns it as `str`
+# without transformation.
+
+
+class GalleryItemRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    orden: int
+    image_url: str
+    alt_text: str
+    link_url: Optional[str] = None
+    activo: bool
+    created_at: datetime
+    updated_at: datetime
+
+    @field_serializer("created_at", "updated_at")
+    def _ser_dates(self, v: datetime) -> str:
+        return _strip_tz(v)
+
+
+class GalleryItemCreate(BaseModel):
+    orden: int = Field(ge=1, le=6)
+    image_url: HttpUrl  # rejects file://, javascript:, data:, bare strings
+    alt_text: str = Field(min_length=1, max_length=200)
+    link_url: Optional[HttpUrl] = None
+    activo: bool = False
+
+
+class GalleryItemUpdate(BaseModel):
+    """Partial update for /gallery/{id}. orden is intentionally excluded — the
+    slot number is set on first create and stays. Use PATCH for field-level
+    changes only; the route uses model_dump(exclude_unset=True) so omitted
+    fields are left untouched in the DB.
+    """
+    image_url: Optional[HttpUrl] = None
+    alt_text: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    link_url: Optional[HttpUrl] = None
+    activo: Optional[bool] = None
