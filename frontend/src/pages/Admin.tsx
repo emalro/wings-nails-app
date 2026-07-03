@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppointment, useUpdateAppointmentStatus, useCreateService, useUpdateService, useDeleteService, useDeleteAppointment, useWeeklySchedule, useUpdateWeeklySchedule, useExceptions, useCreateException, useDeleteException } from '../hooks'
+import { useAppointments, useServices, useConfig, useUpdateConfig, useUpdateAppointment, useUpdateAppointmentStatus, useCreateService, useUpdateService, useDeleteService, useDeleteAppointment, useWeeklySchedule, useUpdateWeeklySchedule, useExceptions, useCreateException, useDeleteException, useGallery, useCreateGalleryItem, useUpdateGalleryItem, useDeleteGalleryItem } from '../hooks'
 import { useAuth } from '../hooks/useAuth'
 import { formatDate, formatTime } from '../lib/datetime'
 import { getApiError } from '../lib/apiErrors'
@@ -10,6 +10,7 @@ import MarkAttendedModal from '../components/MarkAttendedModal'
 import ManualAppointmentModal from '../components/ManualAppointmentModal'
 import ClientSection from '../components/ClientSection'
 import ServicesSection from '../components/admin/ServicesSection'
+import GallerySection from '../components/admin/GallerySection'
 import BusinessConfigSection from '../components/admin/BusinessConfigSection'
 import ScheduleSection from '../components/admin/ScheduleSection'
 import ExceptionsSection from '../components/admin/ExceptionsSection'
@@ -57,7 +58,7 @@ export default function Admin() {
   // Collapsibles state — persisted to localStorage so the admin
   // finds each section as they left it on the next visit.
   const COLLAPSIBLES_STORAGE_KEY = 'wings-nails-app/admin/collapsibles'
-  const COLLAPSIBLE_IDS = ['excepciones', 'clientes', 'horarios', 'servicios', 'configuracion'] as const
+  const COLLAPSIBLE_IDS = ['excepciones', 'clientes', 'horarios', 'servicios', 'galeria', 'configuracion'] as const
   type CollapsibleId = typeof COLLAPSIBLE_IDS[number]
 
   function loadCollapsiblesState(): Record<CollapsibleId, boolean> {
@@ -134,6 +135,13 @@ export default function Admin() {
     ? appointments.filter((a: any) => a.estado_cita === appointmentStatusFilter)
     : appointments
   const { data: services = [], isLoading: serviceLoading } = useServices(showInactive)
+
+  // Gallery state
+  const [showInactiveGallery, setShowInactiveGallery] = useState(false)
+  const { data: gallery = [], isLoading: galleryLoading } = useGallery()
+  const createGalleryMutation = useCreateGalleryItem()
+  const updateGalleryMutation = useUpdateGalleryItem()
+  const deleteGalleryMutation = useDeleteGalleryItem()
 
   const statusMutation = useUpdateAppointmentStatus()
   const updateMutation = useUpdateAppointment()
@@ -571,6 +579,29 @@ export default function Admin() {
             handleUpdateService={handleUpdateService}
             handleToggleServiceActive={handleToggleServiceActive}
             handleDeleteService={handleDeleteService}
+          />
+        </div>
+      </details>
+
+      {/* ── GALERÍA DE TRABAJOS ── */}
+      <details
+        open={collapsiblesState.galeria}
+        onToggle={(e) => setCollapsible('galeria', e.currentTarget.open)}
+        className="admin-card collapsible-card mt-4"
+      >
+        <summary>
+          Galería de Trabajos
+          <span className="chevron">›</span>
+        </summary>
+        <div className="collapsible-body">
+          <GallerySection
+            showInactive={showInactiveGallery}
+            setShowInactive={setShowInactiveGallery}
+            gallery={gallery}
+            galleryLoading={galleryLoading}
+            createGalleryMutation={createGalleryMutation}
+            updateGalleryMutation={updateGalleryMutation}
+            deleteGalleryMutation={deleteGalleryMutation}
           />
         </div>
       </details>
