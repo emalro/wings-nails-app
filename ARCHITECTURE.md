@@ -25,6 +25,7 @@ Incluye la organización de componentes, las relaciones entre módulos, el model
 - `HorarioSemanal`: configuración día por día (activo, hora apertura, hora cierre) para la semana laboral estándar.
 - `ExcepciónHorario`: anulación o modificación puntual del horario para una fecha específica (ej: feriado, media jornada).
 - `Configuración`: parámetros editables del negocio (nombre, redes sociales, WhatsApp, dirección) que se renderizan dinámicamente en la landing page.
+- `Galería`: hasta 6 slots de imágenes administrables (orden, url, alt text, link opcional, activo) que se renderizan como grilla en la landing page. La unicidad de `orden` aplica sólo entre filas activas (la convivencia de inactivos en el mismo orden está permitida).
 
 ## Estados de Cita y transiciones
 - Estados principales: `Pendiente`, `Confirmado`, `Asistido`, `Cancelado_Cliente`, `Cancelado_Sistema_Vencimiento`.
