@@ -611,12 +611,17 @@
   /* ── Gallery (REQ-HGAL-030, REQ-HSSC-001) ── */
   .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  @media (max-width: 768px) {
+    .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .gallery-grid { grid-template-columns: 1fr; }
   }
   .gallery-item {
     position: relative;
-    aspect-ratio: 3 / 4;
     overflow: hidden;
     border-radius: var(--radius-lg);
     background: var(--surface);
@@ -641,7 +646,7 @@
   }
   .gallery-item:hover::after { opacity: 1; }
   .gallery-item img {
-    width: 100%; height: 100%; object-fit: cover; display: block;
+    width: 100%; display: block;
     transition: transform .6s cubic-bezier(.4, 0, .2, 1);
   }
   .gallery-item:hover img { transform: scale(1.05); }

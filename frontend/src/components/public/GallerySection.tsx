@@ -91,8 +91,6 @@ export function GallerySection() {
                       <img
                         src={item.image_url}
                         alt={item.alt_text}
-                        width={384}
-                        height={288}
                         loading="lazy"
                         decoding="async"
                         onError={(e) => {
@@ -114,8 +112,6 @@ export function GallerySection() {
                       <img
                         src={item.image_url}
                         alt={item.alt_text}
-                        width={384}
-                        height={288}
                         loading="lazy"
                         decoding="async"
                         onError={(e) => {

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react'
 import type { GalleryItemRead, GalleryItemCreate, GalleryItemUpdate } from '../../api'
 import { getApiError } from '../../lib/apiErrors'
 import ImageUpload from './ImageUpload'
+import { supabase } from '../../lib/supabase'
 
 type GallerySlot = {
   orden: number
@@ -192,19 +193,41 @@ export default function GallerySection({
 
   function handleDeleteSlot(orden: number) {
     if (!window.confirm(`¿Eliminar el slot ${orden} de la galería?`)) return
-    const itemId = gallery.find((g) => g.orden === orden)?.id
-    if (!itemId) return
+    const item = gallery.find((g) => g.orden === orden)
+    if (!item) return
     setGalleryMessage(null)
     clearSlotFeedback(orden)
-    deleteGalleryMutation.mutate(itemId, {
-      onSuccess: () => {
-        setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Slot eliminado.' } }))
-        setTimeout(() => clearSlotFeedback(orden), 3000)
-      },
-      onError: (err: unknown) => {
-        const apiErr = getApiError(err)
-        setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: apiErr.message } }))
-      },
+
+    // Delete from Supabase Storage if it's a Supabase URL
+    const deleteFromStorage = async () => {
+      if (supabase && item.image_url.includes('supabase.co/storage')) {
+        try {
+          const url = new URL(item.image_url)
+          const pathParts = url.pathname.split('/storage/v1/object/')
+          if (pathParts.length > 1) {
+            const bucketAndPath = pathParts[1]
+            const slashIdx = bucketAndPath.indexOf('/')
+            const bucket = bucketAndPath.substring(0, slashIdx)
+            const filePath = bucketAndPath.substring(slashIdx + 1)
+            await supabase.storage.from(bucket).remove([filePath])
+          }
+        } catch (err) {
+          console.warn('[GallerySection] Failed to delete from Supabase Storage:', err)
+        }
+      }
+    }
+
+    deleteFromStorage().then(() => {
+      deleteGalleryMutation.mutate(item.id, {
+        onSuccess: () => {
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Slot eliminado.' } }))
+          setTimeout(() => clearSlotFeedback(orden), 3000)
+        },
+        onError: (err: unknown) => {
+          const apiErr = getApiError(err)
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: apiErr.message } }))
+        },
+      })
     })
   }
 
