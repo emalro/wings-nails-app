@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import type { GalleryItemRead, GalleryItemCreate, GalleryItemUpdate } from '../../api'
+import { getApiError } from '../../lib/apiErrors'
+import ImageUpload from './ImageUpload'
 
 type GallerySlot = {
   orden: number
@@ -7,6 +9,11 @@ type GallerySlot = {
   alt_text: string
   link_url: string
   activo: boolean
+}
+
+type SlotFeedback = {
+  type: 'success' | 'error' | null
+  message: string
 }
 
 type GallerySectionProps = {
@@ -46,6 +53,16 @@ export default function GallerySection({
   const previewImgRefs = useRef<Record<number, HTMLImageElement | null>>({})
   const [galleryMessage, setGalleryMessage] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState({ image_url: '', alt_text: '', link_url: '' })
+
+  // Local edits per slot — overrides server state until "Guardar" is clicked
+  const [slotEdits, setSlotEdits] = useState<Record<number, { alt_text?: string; link_url?: string; image_url?: string }>>({})
+
+  // Dual mode: active tab per slot ('url' | 'upload')
+  const [activeTabs, setActiveTabs] = useState<Record<number, 'url' | 'upload'>>({})
+
+  // Per-slot feedback for upload and CRUD operations
+  const [slotFeedback, setSlotFeedback] = useState<Record<number, SlotFeedback>>({})
+
   // Debounced fetch for thumbnail
   const fetchPreview = React.useCallback(
     debounce(async (url: string, orden: number) => {
@@ -71,40 +88,46 @@ export default function GallerySection({
     []
   )
 
-  // Create a slot object from gallery item or defaults
+  // Create a slot object from gallery item or defaults, merged with local edits
   const getSlot = (orden: number): GallerySlot => {
     const item = gallery.find((g) => g.orden === orden)
+    const edits = slotEdits[orden] ?? {}
     if (item) {
       return {
         orden: item.orden,
-        image_url: item.image_url,
-        alt_text: item.alt_text,
-        link_url: item.link_url ?? '',
+        image_url: edits.image_url ?? item.image_url,
+        alt_text: edits.alt_text ?? item.alt_text,
+        link_url: edits.link_url ?? (item.link_url ?? ''),
         activo: item.activo,
       }
     }
     return {
       orden,
-      image_url: '',
-      alt_text: '',
-      link_url: '',
+      image_url: edits.image_url ?? '',
+      alt_text: edits.alt_text ?? '',
+      link_url: edits.link_url ?? '',
       activo: true,
     }
   }
 
+  function clearSlotFeedback(orden: number) {
+    setSlotFeedback((prev) => ({ ...prev, [orden]: { type: null, message: '' } }))
+  }
+
   function handleImageUrlChange(orden: number, value: string) {
-    const slotData = getSlot(orden)
-    const updatedSlot = { ...slotData, image_url: value }
+    clearSlotFeedback(orden)
     setSlotErrors((prev) => ({ ...prev, [orden]: '' }))
+    setSlotEdits((prev) => ({ ...prev, [orden]: { ...prev[orden], image_url: value } }))
     fetchPreview(value, orden)
   }
 
   function handleAltTextChange(orden: number, value: string) {
+    setSlotEdits((prev) => ({ ...prev, [orden]: { ...prev[orden], alt_text: value } }))
     setSlotErrors((prev) => ({ ...prev, [orden]: '' }))
   }
 
   function handleLinkUrlChange(orden: number, value: string) {
-    // no validation needed
+    setSlotEdits((prev) => ({ ...prev, [orden]: { ...prev[orden], link_url: value } }))
   }
 
   function validateSlot(slot: GallerySlot): string | null {
@@ -121,34 +144,67 @@ export default function GallerySection({
       setSlotErrors((prev) => ({ ...prev, [orden]: error }))
       return
     }
+    const itemId = gallery.find((g) => g.orden === orden)?.id
+    if (!itemId) return
     setGalleryMessage(null)
+    clearSlotFeedback(orden)
     updateGalleryMutation.mutate(
-      { id: orden, payload: { image_url: slotData.image_url, alt_text: slotData.alt_text, link_url: slotData.link_url || null, activo: slotData.activo } },
+      { id: itemId, payload: { image_url: slotData.image_url, alt_text: slotData.alt_text, link_url: slotData.link_url || null, activo: slotData.activo } },
       {
-        onSuccess: () => setGalleryMessage('Slot guardado.'),
-        onError: () => setGalleryMessage('Error al guardar el slot.'),
+        onSuccess: () => {
+          // Clear local edits after successful save
+          setSlotEdits((prev) => {
+            const next = { ...prev }
+            delete next[orden]
+            return next
+          })
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Slot guardado.' } }))
+          setTimeout(() => clearSlotFeedback(orden), 3000)
+        },
+        onError: (err: unknown) => {
+          const apiErr = getApiError(err)
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: apiErr.message } }))
+        },
       },
     )
   }
 
   function handleToggleActive(orden: number) {
     const slotData = getSlot(orden)
+    const itemId = gallery.find((g) => g.orden === orden)?.id
+    if (!itemId) return
     setGalleryMessage(null)
+    clearSlotFeedback(orden)
     updateGalleryMutation.mutate(
-      { id: orden, payload: { activo: !slotData.activo } },
+      { id: itemId, payload: { activo: !slotData.activo } },
       {
-        onSuccess: () => setGalleryMessage(slotData.activo ? 'Slot inactivado.' : 'Slot reactivado.'),
-        onError: () => setGalleryMessage('Error al cambiar estado del slot.'),
+        onSuccess: () => {
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: slotData.activo ? 'Slot inactivado.' : 'Slot reactivado.' } }))
+          setTimeout(() => clearSlotFeedback(orden), 3000)
+        },
+        onError: (err: unknown) => {
+          const apiErr = getApiError(err)
+          setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: apiErr.message } }))
+        },
       },
     )
   }
 
   function handleDeleteSlot(orden: number) {
     if (!window.confirm(`¿Eliminar el slot ${orden} de la galería?`)) return
+    const itemId = gallery.find((g) => g.orden === orden)?.id
+    if (!itemId) return
     setGalleryMessage(null)
-    deleteGalleryMutation.mutate(orden, {
-      onSuccess: () => setGalleryMessage('Slot eliminado.'),
-      onError: () => setGalleryMessage('Error al eliminar el slot.'),
+    clearSlotFeedback(orden)
+    deleteGalleryMutation.mutate(itemId, {
+      onSuccess: () => {
+        setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Slot eliminado.' } }))
+        setTimeout(() => clearSlotFeedback(orden), 3000)
+      },
+      onError: (err: unknown) => {
+        const apiErr = getApiError(err)
+        setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: apiErr.message } }))
+      },
     })
   }
 
@@ -168,8 +224,29 @@ export default function GallerySection({
         setGalleryMessage('Item agregado a la galería.')
         setCreateForm({ image_url: '', alt_text: '', link_url: '' })
       },
-      onError: () => setGalleryMessage('Error al crear item.'),
+      onError: (err: unknown) => {
+        const apiErr = getApiError(err)
+        setGalleryMessage(apiErr.message)
+      },
     })
+  }
+
+  function handleSlotTabChange(orden: number, tab: 'url' | 'upload') {
+    setActiveTabs((prev) => ({ ...prev, [orden]: tab }))
+    clearSlotFeedback(orden)
+  }
+
+  function handleUploadComplete(orden: number, url: string) {
+    // Update both preview and local slot edit so the URL persists across tab switches
+    setPreviews((prev) => ({ ...prev, [orden]: url }))
+    setPreviewErrors((prev) => ({ ...prev, [orden]: false }))
+    setSlotEdits((prev) => ({ ...prev, [orden]: { ...prev[orden], image_url: url } }))
+    setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Imagen subida. Hacé click en Guardar para persistir.' } }))
+    setTimeout(() => clearSlotFeedback(orden), 5000)
+  }
+
+  function handleUploadError(orden: number, message: string) {
+    setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message } }))
   }
 
   const slots = Array.from({ length: SLOT_COUNT }, (_, i) => i + 1)
@@ -189,14 +266,35 @@ export default function GallerySection({
               style={{ background: 'var(--surface-container)', cursor: 'not-allowed' }}
             />
           </label>
-          <label>
+          <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
             URL de imagen
-            <input
-              value={createForm.image_url}
-              onChange={(e) => setCreateForm((prev) => ({ ...prev, image_url: e.target.value }))}
-              placeholder="https://..."
-              required
-            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
+              <input
+                value={createForm.image_url}
+                onChange={(e) => {
+                  setCreateForm((prev) => ({ ...prev, image_url: e.target.value }))
+                  fetchPreview(e.target.value, 0)
+                }}
+                placeholder="https://..."
+                required
+                style={{ padding: '10px 12px', fontSize: '.9rem' }}
+              />
+              {previews[0] && (
+                <img
+                  src={previews[0]}
+                  alt="Preview"
+                  width={60}
+                  height={60}
+                  style={{ objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--outline-variant)', flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+              )}
+              {previewErrors[0] && !previews[0] && (
+                <div style={{ width: 60, height: 60, border: '1px dashed var(--status-cancelled)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--status-cancelled)', fontSize: '.7rem', textAlign: 'center', padding: '4px' }} role="status" aria-live="polite">
+                  No se pudo cargar
+                </div>
+              )}
+            </div>
           </label>
           <label>
             Texto alternativo <span aria-hidden="true">*</span>
@@ -235,6 +333,17 @@ export default function GallerySection({
           Mostrar inactivos
         </label>
 
+        {galleryMessage && (
+          <div
+            className="status-notice"
+            style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '8px', background: 'var(--surface-container-highest)', fontSize: '.9rem' }}
+            role="status"
+            aria-live="polite"
+          >
+            {galleryMessage}
+          </div>
+        )}
+
         {slots.map((orden) => {
           const slotData = getSlot(orden)
           const isExisting = gallery.some((g) => g.orden === orden)
@@ -246,6 +355,8 @@ export default function GallerySection({
           const previewUrl = previews[orden]
           const hasPreviewError = previewErrors[orden]
           const slotError = slotErrors[orden]
+          const feedback = slotFeedback[orden]
+          const activeTab = activeTabs[orden] ?? 'url'
 
           return (
             <div key={orden} className="edit-card" style={{ marginTop: '16px', padding: '16px' }}>
@@ -257,59 +368,146 @@ export default function GallerySection({
 
                 {/* Form fields */}
                 <div style={{ display: 'grid', gap: '10px', flex: 1 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
-                    <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
-                      URL de imagen
-                      <input
-                        type="url"
-                        value={slotData.image_url}
-                        onChange={(e) => handleImageUrlChange(orden, e.target.value)}
-                        placeholder="https://..."
-                        className="service-form-input"
-                        style={{ padding: '10px 12px', fontSize: '.9rem' }}
-                        aria-describedby={slotError ? `error-${orden}` : hasPreviewError ? `preview-error-${orden}` : undefined}
-                      />
-                    </label>
-                    {/* Thumbnail preview */}
-                    {previewUrl && (
-                      <img
-                        src={previewUrl}
-                        alt=""
-                        width={60}
-                        height={60}
-                        style={{
-                          objectFit: 'cover',
-                          borderRadius: '8px',
-                          border: '1px solid var(--outline-variant)',
-                          flexShrink: 0,
-                        }}
-                        ref={(el) => { previewImgRefs.current[orden] = el }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {hasPreviewError && !previewUrl && (
-                      <div
-                        id={`preview-error-${orden}`}
-                        style={{
-                          width: 60,
-                          height: 60,
-                          border: '1px dashed var(--status-cancelled)',
-                          borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--status-cancelled)',
-                          fontSize: '.7rem',
-                          textAlign: 'center',
-                          padding: '4px',
-                        }}
-                        role="status"
-                        aria-live="polite"
-                      >
-                        No se pudo cargar
+                  {/* Dual mode tabs */}
+                  <div style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--outline-variant)' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleSlotTabChange(orden, 'url')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        fontSize: '.85rem',
+                        fontWeight: 600,
+                        border: 'none',
+                        borderBottom: activeTab === 'url' ? '2px solid var(--primary, #6750a4)' : '2px solid transparent',
+                        background: 'transparent',
+                        color: activeTab === 'url' ? 'var(--primary, #6750a4)' : 'var(--on-surface-variant)',
+                        cursor: 'pointer',
+                      }}
+                      aria-selected={activeTab === 'url'}
+                      role="tab"
+                    >
+                      Pegar URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSlotTabChange(orden, 'upload')}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        fontSize: '.85rem',
+                        fontWeight: 600,
+                        border: 'none',
+                        borderBottom: activeTab === 'upload' ? '2px solid var(--primary, #6750a4)' : '2px solid transparent',
+                        background: 'transparent',
+                        color: activeTab === 'upload' ? 'var(--primary, #6750a4)' : 'var(--on-surface-variant)',
+                        cursor: 'pointer',
+                      }}
+                      aria-selected={activeTab === 'upload'}
+                      role="tab"
+                    >
+                      Subir imagen
+                    </button>
+                  </div>
+
+                  {/* Tab content */}
+                  <div role="tabpanel">
+                    {activeTab === 'url' ? (
+                      /* URL tab */
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
+                        <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
+                          URL de imagen
+                          <input
+                            type="url"
+                            value={slotData.image_url}
+                            onChange={(e) => handleImageUrlChange(orden, e.target.value)}
+                            placeholder="https://..."
+                            className="service-form-input"
+                            style={{ padding: '10px 12px', fontSize: '.9rem' }}
+                            aria-describedby={slotError ? `error-${orden}` : hasPreviewError ? `preview-error-${orden}` : undefined}
+                          />
+                        </label>
+                        {/* Thumbnail preview */}
+                        {previewUrl && (
+                          <img
+                            src={previewUrl}
+                            alt=""
+                            width={60}
+                            height={60}
+                            style={{
+                              objectFit: 'cover',
+                              borderRadius: '8px',
+                              border: '1px solid var(--outline-variant)',
+                              flexShrink: 0,
+                            }}
+                            ref={(el) => { previewImgRefs.current[orden] = el }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        {hasPreviewError && !previewUrl && (
+                          <div
+                            id={`preview-error-${orden}`}
+                            style={{
+                              width: 60,
+                              height: 60,
+                              border: '1px dashed var(--status-cancelled)',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--status-cancelled)',
+                              fontSize: '.7rem',
+                              textAlign: 'center',
+                              padding: '4px',
+                            }}
+                            role="status"
+                            aria-live="polite"
+                          >
+                            No se pudo cargar
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Upload tab */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {previewUrl && (
+                          <img
+                            src={previewUrl}
+                            alt="Preview de imagen subida"
+                            width={80}
+                            height={80}
+                            style={{
+                              objectFit: 'cover',
+                              borderRadius: '8px',
+                              border: '1px solid var(--outline-variant)',
+                            }}
+                          />
+                        )}
+                        <ImageUpload
+                          orden={orden}
+                          currentImageUrl={slotData.image_url || null}
+                          onUploadComplete={(url) => handleUploadComplete(orden, url)}
+                          onError={(msg) => handleUploadError(orden, msg)}
+                        />
                       </div>
                     )}
                   </div>
+
+                  {/* Inline feedback for this slot */}
+                  {feedback?.type && (
+                    <div
+                      role="alert"
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        fontSize: '.85rem',
+                        background: feedback.type === 'success' ? 'var(--surface-container-highest)' : 'var(--status-cancelled-container, #fdecea)',
+                        color: feedback.type === 'success' ? 'var(--on-surface)' : 'var(--status-cancelled, #b3261e)',
+                      }}
+                    >
+                      {feedback.message}
+                    </div>
+                  )}
 
                   <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
                     Texto alternativo <span aria-hidden="true">*</span>

@@ -5,7 +5,7 @@
 **Source artifacts**: `openspec/changes/home-static-sections/exploration.md`, `proposal.md`
 **Type**: ADDED (new capability; no prior `home-gallery` spec exists)
 **Strict TDD**: ACTIVE for backend (pytest in `backend/tests/test_gallery.py`)
-**Locked decisions referenced**: Approach A (standalone `GalleryItem` table + dedicated endpoints), 6 slots fixed 1..6, public `GET /gallery` returns 6 items, admin CRUD trio requires auth, lightbox as custom modal, external URLs only (no file upload).
+**Locked decisions referenced**: Approach A (standalone `GalleryItem` table + dedicated endpoints), 6 slots fixed 1..6, public `GET /gallery` returns 6 items, admin CRUD trio requires auth, lightbox as custom modal, dual mode (URL paste + Supabase Storage upload).
 
 ---
 
@@ -21,7 +21,7 @@ This capability owns:
 - The admin `GallerySection` component (slot editors + DataTable).
 - The cross-cutting data hook `useGallery` (read) and admin mutations (create/update/delete).
 
-Out of scope (covered elsewhere): brand assets (logo, favicon) — see `home-static-content`. Carousel pattern — explicitly rejected (WCAG 2.2.2). File upload service — explicitly rejected (external URLs only).
+Out of scope (covered elsewhere): brand assets (logo, favicon) — see `home-static-content`. Carousel pattern — explicitly rejected (WCAG 2.2.2). Backend file upload proxy — upload is direct browser→Supabase Storage (backend remains stateless).
 
 ---
 
@@ -236,3 +236,100 @@ Si el `<img>` dispara `onError` (URL rota, 404, hotlink expirado), el componente
 - THEN el `<figure>` del grid muestra el texto "Imagen no disponible" en lugar del icono roto
 - Y al abrir el lightbox sobre ese item, el área de la imagen muestra el mismo texto
 - Y el `alt_text` original sigue siendo accesible para lectores de pantalla
+
+---
+
+### REQ-HGAL-070 — Supabase Storage upload (MUST)
+
+El frontend DEBE poder subir imágenes directamente a Supabase Storage sin pasar por el backend (upload directo browser→Supabase). El backend DEBE permanecer stateless — no se requieren nuevos endpoints de upload. El bucket de Supabase DEBE configurarse con políticas RLS que permitan escritura solo a usuarios autenticados (admin) y lectura pública. Las imágenes subidas DEBEN almacenarse en el bucket `gallery-images` con la ruta `{orden}/{timestamp}.{ext}`.
+
+#### Scenario: Admin sube imagen exitosamente
+- DADO un admin autenticado en el panel de galería
+- CUANDO selecciona un archivo JPG/PNG/WebP/GIF válido (≤5MB)
+- THEN la imagen se sube directamente a Supabase Storage
+- Y `image_url` se actualiza con la URL pública de Supabase Storage
+- Y el preview thumbnail muestra la imagen subida
+
+#### Scenario: Upload falla por archivo demasiado grande
+- DADO un admin autenticado
+- CUANDO intenta subir un archivo de 10MB
+- THEN el sistema muestra un error claro "La imagen no puede superar 5MB"
+- Y la imagen NO se sube a Supabase Storage
+
+#### Scenario: Upload falla por formato no soportado
+- DADO un admin autenticado
+- CUANDO intenta subir un archivo .svg o .bmp
+- THEN el sistema muestra un error claro "Formato no soportado. Usá JPG, PNG, WebP o GIF"
+- Y la imagen NO se sube a Supabase Storage
+
+---
+
+### REQ-HGAL-071 — Upload UI con crop/resize (MUST)
+
+El componente de upload DEBE incluir un file picker que acepte JPG, PNG, WebP y GIF. Después de seleccionar un archivo, DEBE mostrar un modal de crop/resize con canvas interactivo que permita al admin recortar la imagen a aspect ratio 4:3 (landscape) o 1:1 (cuadrado). El DEBE permitir zoom in/out y pan. El resultado DEBE comprimirse a ≤1MB antes del upload a Supabase Storage. El componente DEBE mostrar un preview de la imagen recortada antes de confirmar.
+
+#### Scenario: Crop/resize modal aparece después de seleccionar archivo
+- DADO un admin autenticado
+- CUANDO selecciona una imagen de 2000x1500px
+- THEN aparece un modal con la imagen y controles de crop/resize
+- Y el aspect ratio default es 4:3 (landscape)
+
+#### Scenario: Admin recorta y confirma
+- DADO el modal de crop abierto con una imagen
+- CUANDO el admin ajusta el recorte y hace click en "Confirmar"
+- THEN la imagen se comprime y sube a Supabase Storage
+- Y el preview en el slot editor muestra la imagen recortada
+
+---
+
+### REQ-HGAL-072 — Dual mode: URL + upload (MUST)
+
+El admin DEBE poder elegir entre pegar una URL externa O subir un archivo para cada slot de galería. La interfaz DEBE mostrar dos pestañas o secciones claras: "URL externa" y "Subir imagen". Al cambiar de pestaña, el `image_url` del slot DEBE actualizarse con la fuente correspondiente. Si el admin pega una URL y luego sube un archivo, el upload SOBRESCRIBE la URL (solo una fuente por slot).
+
+#### Scenario: Admin elige entre URL y upload
+- DADO un slot vacío
+- CUANDO el admin visualiza el editor del slot
+- THEN ve dos opciones claras: "Pegar URL" y "Subir imagen"
+- Y puede alternar entre ambas sin perder datos en otros campos
+
+#### Scenario: Upload sobrescribe URL existente
+- DADO un slot con `image_url` apuntando a una URL externa
+- CUANDO el admin sube un archivo
+- THEN `image_url` se actualiza con la URL de Supabase Storage
+- Y la URL externa anterior se reemplaza (no se conserva)
+
+---
+
+### REQ-HGAL-073 — Manejo de errores (MUST)
+
+Todos los errores de la galería (upload, CRUD, validación) DEBEN mostrar mensajes claros y accionables al admin. Los errores DEBEN seguir el patrón existente de `getApiError()` para errores de API y mensajes inline para errores de upload. El admin DEBE poder reintentar después de un error sin perder datos ingresados.
+
+#### Scenario: Error de upload muestra mensaje claro
+- DADO un admin autenticado
+- CUANDO el upload falla por error de red
+- THEN se muestra un error "No se pudo subir la imagen. Verificá tu conexión y reintenta"
+- Y los campos del slot conservan los valores ingresados
+
+#### Scenario: Error de validación del backend
+- DADO un admin autenticado
+- CUANDO envía `POST /gallery` con `orden` duplicado entre activos
+- THEN se muestra el error 409 "Ya existe un slot activo con ese orden"
+- Y el admin puede corregir y reintentar
+
+---
+
+### REQ-HGAL-074 — Fix: mutaciones usan DB id (MUST)
+
+Los handlers `handleDeleteSlot`, `handleSaveSlot` y `handleToggleActive` en `GallerySection.tsx` DEBEN usar el `id` de la DB (auto-incremental) en vez del `orden` (1-6) para todas las operaciones de mutación (PATCH, DELETE). El `orden` es solo un número de slot — el `id` es la clave primaria real.
+
+#### Scenario: Delete funciona después de delete+recreate
+- DADO un slot con `orden=3` e `id=3` (seed original)
+- CUANDO el admin elimina ese slot y crea uno nuevo en `orden=3`
+- THEN el nuevo slot tiene `id=7` (auto-increment)
+- Y el admin puede guardar, toggle activo, y eliminar el nuevo slot sin errores 404
+
+#### Scenario: Save funciona con id != orden
+- DADO un slot con `orden=2` e `id=5`
+- CUANDO el admin cambia `alt_text` y hace click en "Guardar"
+- THEN el PATCH se envía con `id=5` (no `orden=2`)
+- Y el sistema responde 200 con el item actualizado

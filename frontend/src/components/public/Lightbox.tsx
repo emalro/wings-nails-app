@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface LightboxProps {
   open: boolean
@@ -11,6 +11,7 @@ interface LightboxProps {
 export function Lightbox({ open, onClose, src, alt, triggerRef }: LightboxProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const [imgError, setImgError] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -73,11 +74,28 @@ export function Lightbox({ open, onClose, src, alt, triggerRef }: LightboxProps)
         <h2 id="lightbox-title" className="visually-hidden">
           {alt}
         </h2>
-        <img
-          className="lightbox-image"
-          src={src}
-          alt={alt}
-        />
+        {imgError ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '48px',
+              color: '#ccc',
+              fontStyle: 'italic',
+              fontSize: '1rem',
+            }}
+          >
+            Imagen no disponible
+          </div>
+        ) : (
+          <img
+            className="lightbox-image"
+            src={src}
+            alt={alt}
+            onError={() => setImgError(true)}
+          />
+        )}
         <button
           ref={closeButtonRef}
           className="lightbox-close"

@@ -102,14 +102,13 @@ export function GallerySection() {
                         }}
                       />
                       <div className="gallery-item-fallback" style={{ display: 'none' }} aria-hidden="true">
-                        {item.alt_text}
+                        Imagen no disponible
                       </div>
                     </a>
                   ) : (
                     <button
                       type="button"
-                      ref={(el) => el && setTriggerRef(el)}
-                      onClick={() => handleThumbnailClick(item, triggerRef)}
+                      onClick={(e) => handleThumbnailClick(item, e.currentTarget)}
                       aria-label={`Abrir lightbox: ${item.alt_text}`}
                     >
                       <img
@@ -126,7 +125,7 @@ export function GallerySection() {
                         }}
                       />
                       <div className="gallery-item-fallback" style={{ display: 'none' }} aria-hidden="true">
-                        {item.alt_text}
+                        Imagen no disponible
                       </div>
                     </button>
                   )}
