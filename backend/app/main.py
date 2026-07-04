@@ -141,6 +141,16 @@ def run_migration(session: Session) -> None:
             if rows:
                 session.commit()
 
+    # Add sobre_mi column to configuracion if it doesn't exist
+    try:
+        if is_postgres:
+            session.exec(text("ALTER TABLE configuracion ADD COLUMN IF NOT EXISTS sobre_mi TEXT NOT NULL DEFAULT ''"))
+        else:
+            session.exec(text("ALTER TABLE configuracion ADD COLUMN sobre_mi TEXT NOT NULL DEFAULT ''"))
+        session.commit()
+    except Exception:
+        session.rollback()  # Column already exists — ignore
+
 
 def seed_admin_user(session: Session) -> None:
     """Seed admin user from environment variables if not already present."""
