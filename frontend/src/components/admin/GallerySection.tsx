@@ -61,6 +61,9 @@ export default function GallerySection({
   // Dual mode: active tab per slot ('url' | 'upload')
   const [activeTabs, setActiveTabs] = useState<Record<number, 'url' | 'upload'>>({})
 
+  // Create form tab
+  const [createTab, setCreateTab] = useState<'url' | 'upload'>('url')
+
   // Per-slot feedback for upload and CRUD operations
   const [slotFeedback, setSlotFeedback] = useState<Record<number, SlotFeedback>>({})
 
@@ -199,25 +202,37 @@ export default function GallerySection({
     clearSlotFeedback(orden)
 
     // Delete from Supabase Storage if it's a Supabase URL
-    const deleteFromStorage = async () => {
-      if (supabase && item.image_url.includes('supabase.co/storage')) {
-        try {
-          const url = new URL(item.image_url)
-          const pathParts = url.pathname.split('/storage/v1/object/')
-          if (pathParts.length > 1) {
-            const bucketAndPath = pathParts[1]
-            const slashIdx = bucketAndPath.indexOf('/')
-            const bucket = bucketAndPath.substring(0, slashIdx)
-            const filePath = bucketAndPath.substring(slashIdx + 1)
-            await supabase.storage.from(bucket).remove([filePath])
-          }
-        } catch (err) {
-          console.warn('[GallerySection] Failed to delete from Supabase Storage:', err)
+    const deleteFromStorage = async (): Promise<boolean> => {
+      if (!supabase || !item.image_url.includes('supabase.co/storage')) return true
+      try {
+        const url = new URL(item.image_url)
+        const marker = '/storage/v1/object/'
+        const idx = url.pathname.indexOf(marker)
+        if (idx === -1) return true
+        // Path after marker: "public/gallery-images/1/1234567890.jpeg"
+        const afterMarker = url.pathname.substring(idx + marker.length)
+        const segments = afterMarker.split('/')
+        // segments[0] = "public" or "sign", segments[1] = bucket, rest = file path
+        if (segments.length < 3) return true
+        const bucket = segments[1]
+        const filePath = segments.slice(2).join('/')
+        console.log('[GallerySection] Deleting from storage:', { bucket, filePath })
+        const { error } = await supabase.storage.from(bucket).remove([filePath])
+        if (error) {
+          console.error('[GallerySection] Storage delete error:', error)
+          return false
         }
+        return true
+      } catch (err) {
+        console.error('[GallerySection] Failed to delete from Supabase Storage:', err)
+        return false
       }
     }
 
-    deleteFromStorage().then(() => {
+    deleteFromStorage().then((storageOk) => {
+      if (!storageOk) {
+        setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'error', message: 'No se pudo borrar la imagen de Supabase. Se eliminó solo el registro.' } }))
+      }
       deleteGalleryMutation.mutate(item.id, {
         onSuccess: () => {
           setSlotFeedback((prev) => ({ ...prev, [orden]: { type: 'success', message: 'Slot eliminado.' } }))
@@ -246,6 +261,8 @@ export default function GallerySection({
       onSuccess: () => {
         setGalleryMessage('Item agregado a la galería.')
         setCreateForm({ image_url: '', alt_text: '', link_url: '' })
+        setPreviews((prev) => { const next = { ...prev }; delete next[0]; return next })
+        setCreateTab('url')
       },
       onError: (err: unknown) => {
         const apiErr = getApiError(err)
@@ -279,74 +296,128 @@ export default function GallerySection({
     <div className="admin-grid">
       <div>
         <h3>Crear item de galería</h3>
-        <form onSubmit={handleCreateSlot} className="service-form">
-          <label>
-            Orden (1-6)
-            <input
-              type="number"
-              value={nextFreeOrden ?? ''}
-              readOnly
-              style={{ background: 'var(--surface-container)', cursor: 'not-allowed' }}
-            />
-          </label>
-          <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
-            URL de imagen
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
+        {nextFreeOrden === null ? (
+          <div className="status-notice" style={{ padding: '16px', textAlign: 'center', color: 'var(--on-surface-variant)' }}>
+            Todos los slots están ocupados. Eliminá uno para crear un nuevo item.
+          </div>
+        ) : (
+          <form onSubmit={handleCreateSlot} className="service-form">
+            <label>
+              Slot
               <input
-                value={createForm.image_url}
-                onChange={(e) => {
-                  setCreateForm((prev) => ({ ...prev, image_url: e.target.value }))
-                  fetchPreview(e.target.value, 0)
-                }}
-                placeholder="https://..."
-                required
-                style={{ padding: '10px 12px', fontSize: '.9rem' }}
+                type="number"
+                value={nextFreeOrden}
+                readOnly
+                style={{ background: 'var(--surface-container)', cursor: 'not-allowed' }}
               />
-              {previews[0] && (
-                <img
-                  src={previews[0]}
-                  alt="Preview"
-                  width={60}
-                  height={60}
-                  style={{ objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--outline-variant)', flexShrink: 0 }}
-                  aria-hidden="true"
-                />
-              )}
-              {previewErrors[0] && !previews[0] && (
-                <div style={{ width: 60, height: 60, border: '1px dashed var(--status-cancelled)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--status-cancelled)', fontSize: '.7rem', textAlign: 'center', padding: '4px' }} role="status" aria-live="polite">
-                  No se pudo cargar
+            </label>
+
+            {/* Dual mode tabs for create */}
+            <div style={{ display: 'flex', gap: '2px', borderBottom: '1px solid var(--outline-variant)' }}>
+              <button
+                type="button"
+                onClick={() => setCreateTab('url')}
+                style={{
+                  flex: 1, padding: '8px 12px', fontSize: '.85rem', fontWeight: 600,
+                  border: 'none',
+                  borderBottom: createTab === 'url' ? '2px solid var(--primary)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: createTab === 'url' ? 'var(--primary)' : 'var(--on-surface-variant)',
+                  cursor: 'pointer',
+                }}
+              >
+                Pegar URL
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateTab('upload')}
+                style={{
+                  flex: 1, padding: '8px 12px', fontSize: '.85rem', fontWeight: 600,
+                  border: 'none',
+                  borderBottom: createTab === 'upload' ? '2px solid var(--primary)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: createTab === 'upload' ? 'var(--primary)' : 'var(--on-surface-variant)',
+                  cursor: 'pointer',
+                }}
+              >
+                Subir imagen
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '10px', marginTop: '10px' }}>
+              {createTab === 'url' ? (
+                <label style={{ display: 'grid', gap: '6px', fontWeight: 600, fontSize: '.85rem' }}>
+                  URL de imagen
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'end' }}>
+                    <input
+                      value={createForm.image_url}
+                      onChange={(e) => {
+                        setCreateForm((prev) => ({ ...prev, image_url: e.target.value }))
+                        fetchPreview(e.target.value, 0)
+                      }}
+                      placeholder="https://..."
+                      required={createTab === 'url'}
+                      style={{ padding: '10px 12px', fontSize: '.9rem' }}
+                    />
+                    {previews[0] && (
+                      <img
+                        src={previews[0]}
+                        alt="Preview"
+                        width={60}
+                        height={60}
+                        style={{ objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--outline-variant)', flexShrink: 0 }}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
+                </label>
+              ) : (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {previews[0] && (
+                    <img
+                      src={previews[0]}
+                      alt="Preview"
+                      style={{ width: '100%', maxHeight: '200px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--outline-variant)' }}
+                    />
+                  )}
+                  <ImageUpload
+                    orden={nextFreeOrden}
+                    currentImageUrl={null}
+                    onUploadComplete={(url) => {
+                      setCreateForm((prev) => ({ ...prev, image_url: url }))
+                      setPreviews((prev) => ({ ...prev, [0]: url }))
+                    }}
+                    onError={(msg) => setGalleryMessage(msg)}
+                  />
                 </div>
               )}
             </div>
-          </label>
-          <label>
-            Texto alternativo <span aria-hidden="true">*</span>
-            <input
-              value={createForm.alt_text}
-              onChange={(e) => setCreateForm((prev) => ({ ...prev, alt_text: e.target.value }))}
-              required
-            />
-          </label>
-          <label>
-            URL de enlace (opcional)
-            <input
-              value={createForm.link_url}
-              onChange={(e) => setCreateForm((prev) => ({ ...prev, link_url: e.target.value }))}
-              placeholder="https://..."
-            />
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" defaultChecked={true} readOnly />
-            Activo
-          </label>
-          <button
-            className="button-primary"
-            type="submit"
-            disabled={createGalleryMutation.isPending || nextFreeOrden === null || createForm.alt_text.trim() === ''}
-          >
-            {createGalleryMutation.isPending ? 'Creando...' : nextFreeOrden === null ? 'Slots completos' : 'Agregar a galería'}
-          </button>
-        </form>
+
+            <label>
+              Texto alternativo <span aria-hidden="true">*</span>
+              <input
+                value={createForm.alt_text}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, alt_text: e.target.value }))}
+                required
+              />
+            </label>
+            <label>
+              URL de enlace (opcional)
+              <input
+                value={createForm.link_url}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, link_url: e.target.value }))}
+                placeholder="https://..."
+              />
+            </label>
+            <button
+              className="button-primary"
+              type="submit"
+              disabled={createGalleryMutation.isPending || createForm.alt_text.trim() === '' || (createTab === 'url' && !createForm.image_url)}
+            >
+              {createGalleryMutation.isPending ? 'Creando...' : 'Agregar a galería'}
+            </button>
+          </form>
+        )}
       </div>
 
       <div>
