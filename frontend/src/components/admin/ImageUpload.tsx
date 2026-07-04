@@ -367,7 +367,8 @@ export default function ImageUpload({
         .upload(path, blob)
 
       if (uploadError) {
-        onError('No se pudo subir la imagen. Verificá tu conexión y reintenta')
+        console.error('[ImageUpload] Supabase upload error:', uploadError.message, uploadError)
+        onError(`Error al subir: ${uploadError.message}`)
         setIsUploading(false)
         setUploadProgress('')
         return
