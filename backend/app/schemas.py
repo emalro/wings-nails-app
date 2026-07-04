@@ -220,6 +220,7 @@ class ConfiguracionUpdate(BaseModel):
     address: Optional[str] = None
     cbu_alias: Optional[str] = None
     cbu_number: Optional[str] = None
+    sobre_mi: Optional[str] = None
 
 
 class ConfiguracionRead(BaseModel):
@@ -232,6 +233,7 @@ class ConfiguracionRead(BaseModel):
     address: str
     cbu_alias: str
     cbu_number: str
+    sobre_mi: str
 
 
 class CitaServicioRead(BaseModel):

@@ -167,6 +167,7 @@ export default function Admin() {
     address: '',
     cbu_alias: '',
     cbu_number: '',
+    sobre_mi: '',
   })
   const [configMessage, setConfigMessage] = useState<string | null>(null)
 
@@ -249,6 +250,7 @@ export default function Admin() {
         address: config.address || '',
         cbu_alias: config.cbu_alias || '',
         cbu_number: config.cbu_number || '',
+        sobre_mi: config.sobre_mi || '',
       })
     }
   }, [config])

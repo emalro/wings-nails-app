@@ -480,6 +480,33 @@ def get_effective_hours_logic(target_date: date, session: Session) -> EffectiveH
     return EffectiveHoursResponse(abierto=False)
 
 
+# ── Supabase Storage delete (service_role bypasses RLS) ──────────────
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+
+@app.delete("/storage/delete")
+def delete_storage_file(
+    bucket: str = Query(...),
+    path: str = Query(...),
+    current_user: Usuario = Depends(get_current_user),
+):
+    """Delete a file from Supabase Storage using the service_role key."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase storage not configured on server")
+
+    import httpx
+    url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "apikey": SUPABASE_SERVICE_KEY,
+    }
+    resp = httpx.delete(url, headers=headers, timeout=10)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=f"Storage delete failed: {resp.text}")
+    return {"ok": True}
+
+
 def validate_appointment_hours(
     fecha_hora_cita: datetime,
     service_duration_minutes: int,

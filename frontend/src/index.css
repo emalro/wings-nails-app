@@ -218,6 +218,19 @@
   /* ── Sections ── */
   .section { padding: 72px 20px; }
   .section-alt { background: var(--surface); }
+
+  /* ── About Copy (HTML from admin) ── */
+  .about-copy {
+    max-width: 680px; margin: 0 auto;
+    font-size: 1rem; line-height: 1.8;
+    color: var(--on-surface);
+    text-align: center;
+  }
+  .about-copy p { margin-bottom: 16px; }
+  .about-copy p:last-child { margin-bottom: 0; }
+  .about-copy b, .about-copy strong { color: var(--on-background); font-weight: 700; }
+  .about-copy i, .about-copy em { color: var(--on-surface-variant); }
+
   .section-header { text-align: center; margin-bottom: 48px; }
   .section-header .overline {
     display: inline-block; font-size: 1rem; font-weight: 600;
