@@ -13,4 +13,6 @@ if (!supabase) {
   console.warn(
     '[supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is not set. Gallery upload will not work.',
   )
+} else {
+  console.log('[supabase] Client initialized for:', supabaseUrl)
 }
