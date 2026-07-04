@@ -401,6 +401,41 @@ class PublicAppointmentResponse(BaseModel):
     estado_cita: EstadoCita  # always "Pendiente" — hardcoded by the route (REQ-PUB-004)
 
 
+# ── Testimonial schemas ──────────────────────────────────────────────────
+
+
+class TestimonialRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nombre: str
+    rol: Optional[str] = None
+    quote: str
+    activo: bool
+    orden: int
+    created_at: datetime
+    updated_at: datetime
+
+    @field_serializer("created_at", "updated_at")
+    def _ser_dates(self, v: datetime) -> str:
+        return _strip_tz(v)
+
+
+class TestimonialCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=100)
+    rol: Optional[str] = Field(default=None, max_length=100)
+    quote: str = Field(min_length=1, max_length=500)
+    activo: bool = True
+    orden: int = Field(default=0)
+
+
+class TestimonialUpdate(BaseModel):
+    nombre: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    rol: Optional[str] = Field(default=None, max_length=100)
+    quote: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    activo: Optional[bool] = None
+    orden: Optional[int] = None
+
+
 # ── home-gallery schemas (REQ-HMG-001..022) ─────────────────────────────────
 #
 # 3 schemas, not 4: Read + Create + Update. The "missing" 4th is a deliberate

@@ -524,3 +524,58 @@ export async function updateGalleryItem(id: number, payload: GalleryItemUpdate):
 export async function deleteGalleryItem(id: number): Promise<void> {
   await api.delete(`/gallery/${id}`)
 }
+
+// ── Testimonial Types ───────────────────────────────────────────────────
+
+export type TestimonialRead = {
+  id: number
+  nombre: string
+  rol: string | null
+  quote: string
+  activo: boolean
+  orden: number
+  created_at: string
+  updated_at: string
+}
+
+export type TestimonialCreate = {
+  nombre: string
+  rol?: string | null
+  quote: string
+  activo?: boolean
+  orden?: number
+}
+
+export type TestimonialUpdate = {
+  nombre?: string
+  rol?: string | null
+  quote?: string
+  activo?: boolean
+  orden?: number
+}
+
+// ── Testimonial API ─────────────────────────────────────────────────────
+
+export async function getTestimonials(): Promise<TestimonialRead[]> {
+  const r = await api.get('/testimonials')
+  return r.data
+}
+
+export async function getAllTestimonials(): Promise<TestimonialRead[]> {
+  const r = await api.get('/testimonials/all')
+  return r.data
+}
+
+export async function createTestimonial(payload: TestimonialCreate): Promise<TestimonialRead> {
+  const r = await api.post('/testimonials', payload)
+  return r.data
+}
+
+export async function updateTestimonial(id: number, payload: TestimonialUpdate): Promise<TestimonialRead> {
+  const r = await api.patch(`/testimonials/${id}`, payload)
+  return r.data
+}
+
+export async function deleteTestimonial(id: number): Promise<void> {
+  await api.delete(`/testimonials/${id}`)
+}
