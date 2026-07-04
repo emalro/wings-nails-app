@@ -352,6 +352,13 @@ export default function ImageUpload({
       setIsUploading(true)
       setUploadProgress('Subiendo imagen...')
 
+      if (!supabase) {
+        onError('Supabase no está configurado. Agregá VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY al .env')
+        setIsUploading(false)
+        setUploadProgress('')
+        return
+      }
+
       const ext = selectedFile.type.split('/')[1] || 'jpg'
       const path = `${orden}/${Date.now()}.${ext}`
 
