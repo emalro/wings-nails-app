@@ -1,25 +1,19 @@
 import React from 'react'
-
-// TODO(sdd): user copy approval required
-const TESTIMONIALS = [
-  {
-    name: 'María González',
-    role: 'Clienta habitual',
-    quote: 'La atención es impecable. Salgo siempre con las uñas perfectas y me siento muy cuidada en cada visita. ¡Totalmente recomendable!',
-  },
-  {
-    name: 'Laura Fernández',
-    role: 'Primera vez',
-    quote: 'No sabía qué diseño elegir y me asesoraron con mucha paciencia. El resultado superó mis expectativas. Volveré sin duda.',
-  },
-  {
-    name: 'Carolina Ruiz',
-    role: 'Clienta desde 2022',
-    quote: 'Años confiando en este estudio y nunca me decepcionan. La calidad de los productos y la higiene son de diez.',
-  },
-] as const
+import { useQuery } from '@tanstack/react-query'
+import { getTestimonials, type TestimonialRead } from '../../api'
 
 export default function TestimonialsSection() {
+  const { data: testimonials = [], isLoading } = useQuery<TestimonialRead[]>({
+    queryKey: ['testimonials-public'],
+    queryFn: getTestimonials,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+
+  if (isLoading || testimonials.length === 0) {
+    return null
+  }
+
   return (
     <section className="section section-alt" aria-labelledby="testimonios-title">
       <div className="content">
@@ -30,16 +24,15 @@ export default function TestimonialsSection() {
         </div>
 
         <div className="testimonials-grid" role="list" aria-label="Testimonios de clientas">
-          {TESTIMONIALS.map((testimonial, index) => (
-            <article key={index} className="testimonial-card" role="listitem">
-              <div className="testimonial-badge">Ejemplo</div>
+          {testimonials.map((testimonial) => (
+            <article key={testimonial.id} className="testimonial-card" role="listitem">
               <blockquote className="testimonial-quote">
                 <p>&ldquo;{testimonial.quote}&rdquo;</p>
               </blockquote>
               <footer className="testimonial-author">
-                <div className="testimonial-name">{testimonial.name}</div>
-                {testimonial.role && (
-                  <div className="testimonial-role">{testimonial.role}</div>
+                <div className="testimonial-name">{testimonial.nombre}</div>
+                {testimonial.rol && (
+                  <div className="testimonial-role">{testimonial.rol}</div>
                 )}
               </footer>
             </article>

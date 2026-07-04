@@ -18,8 +18,8 @@ from pydantic import HttpUrl, ValidationError
 from .auth import create_access_token, create_refresh_token, verify_token, verify_password, get_password_hash, MIN_SECRET_KEY_BYTES
 from .database import create_db_and_tables, get_session, engine
 from .deps import get_current_user
-from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario, GalleryItem
-from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse, GalleryItemRead, GalleryItemCreate, GalleryItemUpdate
+from .models import Cliente, ClienteTelefono, Servicio, Cita, CitaServicio, Configuracion, EstadoCita, HorarioSemanal, ExcepcionHorario, Usuario, GalleryItem, Testimonial
+from .schemas import ClienteCreate, ClienteRead, ClienteUpdate, ClienteTelefonoCreate, ClienteTelefonoRead, ClienteTelefonoUpdate, normalize_phone, ServicioCreate, ServicioRead, ServicioUpdate, CitaCreate, CitaRead, CitaUpdate, CitaServicioRead, ConfiguracionRead, ConfiguracionUpdate, HorarioSemanalRead, HorarioSemanalUpdate, ExcepcionHorarioCreate, ExcepcionHorarioRead, EffectiveHoursResponse, LoginRequest, TokenResponse, UserRead, PublicClientLookupRequest, PublicClientLookupResponse, PublicAppointmentCreate, PublicAppointmentResponse, GalleryItemRead, GalleryItemCreate, GalleryItemUpdate, TestimonialRead, TestimonialCreate, TestimonialUpdate
 
 LOGIN_RATE_LIMIT = os.getenv("LOGIN_RATE_LIMIT", "5/minute")
 # COOKIE_SECURE defaults to TRUE so production cookies always carry the
@@ -1133,6 +1133,86 @@ def delete_gallery_item(
     item = session.get(GalleryItem, gallery_id)
     if not item:
         raise HTTPException(status_code=404, detail="GalleryItem no encontrado")
+    session.delete(item)
+    session.commit()
+    return Response(status_code=204)
+
+
+# ── Testimonial endpoints ─────────────────────────────────────────────────
+
+
+@app.get("/testimonials", response_model=list[TestimonialRead])
+def list_testimonials(session: Session = Depends(get_session)):
+    """Public: return all active testimonials ordered by orden ASC."""
+    items = session.exec(
+        select(Testimonial).where(Testimonial.activo == True).order_by(Testimonial.orden.asc())
+    ).all()
+    return items
+
+
+@app.get("/testimonials/all", response_model=list[TestimonialRead])
+def list_all_testimonials(
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: return all testimonials (active + inactive) ordered by orden ASC."""
+    items = session.exec(
+        select(Testimonial).order_by(Testimonial.orden.asc())
+    ).all()
+    return items
+
+
+@app.post("/testimonials", response_model=TestimonialRead, status_code=201)
+def create_testimonial(
+    payload: TestimonialCreate,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: create a new testimonial."""
+    item = Testimonial(
+        nombre=payload.nombre,
+        rol=payload.rol,
+        quote=payload.quote,
+        activo=payload.activo,
+        orden=payload.orden,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+@app.patch("/testimonials/{testimonial_id}", response_model=TestimonialRead)
+def update_testimonial(
+    testimonial_id: int,
+    payload: TestimonialUpdate,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: partial update a testimonial."""
+    item = session.get(Testimonial, testimonial_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Testimonio no encontrado")
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+    item.updated_at = datetime.now(timezone.utc)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item
+
+
+@app.delete("/testimonials/{testimonial_id}", status_code=204)
+def delete_testimonial(
+    testimonial_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Admin: hard delete a testimonial."""
+    item = session.get(Testimonial, testimonial_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Testimonio no encontrado")
     session.delete(item)
     session.commit()
     return Response(status_code=204)

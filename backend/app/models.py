@@ -114,6 +114,18 @@ class Usuario(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class Testimonial(SQLModel, table=True):
+    __tablename__ = "testimonial"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nombre: str = Field(max_length=100)
+    rol: Optional[str] = Field(default=None, max_length=100)
+    quote: str = Field(max_length=500)
+    activo: bool = Field(default=True)
+    orden: int = Field(default=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class GalleryItem(SQLModel, table=True):
     # REQ-HMG-001 (home-gallery): 6 admin-configurable image slots for the Home
     # gallery. orden uniqueness is enforced at the route level (R13) — see
