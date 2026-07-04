@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useServices, useBusySlots, useConfig } from '../hooks'
+import { useSEO } from '../hooks/useSEO'
 import { useFormValidation } from '../hooks/useFormValidation'
 import { formatDate, formatDateShort, formatTime, formatDayNameLong, formatMonthName, capitalize } from '../lib/datetime'
 import { getApiError } from '../lib/apiErrors'
@@ -34,6 +35,12 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_RE = /^\d{10,11}$/
 
 export default function Reservar() {
+  useSEO({
+    title: 'Reservar Turno',
+    description: 'Reservá tu turno de manicuría online en Nails Studio. Elegí servicio, fecha y horario en Rosario, Santa Fe.',
+    canonical: 'https://wings-nails-app.vercel.app/reservar',
+  })
+
   const [step, setStep] = useState<Step>('service')
   const [selectedServices, setSelectedServices] = useState<number[]>([])
   const [message, setMessage] = useState<string | null>(null)

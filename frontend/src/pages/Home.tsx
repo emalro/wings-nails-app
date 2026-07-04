@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useServices, useConfig } from '../hooks'
+import { useSEO } from '../hooks/useSEO'
 import { isContactUrl } from '../lib/contactLinks'
 import { SkeletonLoader } from '../components/SkeletonLoader'
 import { GallerySection } from '../components/public/GallerySection'
@@ -12,6 +13,13 @@ import type { Servicio } from '../api'
 
 export default function Home() {
   const navigate = useNavigate()
+
+  useSEO({
+    title: 'Inicio',
+    description: 'Nails Studio — Manicuría y nail design profesional en Rosario, Santa Fe. Reservá tu turno online, elegí servicio, fecha y horario.',
+    canonical: 'https://wings-nails-app.vercel.app/',
+  })
+
   const { data: services = [], isLoading, isError: servicesError, refetch: refetchServices } = useServices()
   const { data: config, isLoading: configLoading } = useConfig()
 
