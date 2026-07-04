@@ -103,6 +103,7 @@ class Configuracion(SQLModel, table=True):
     address: str = Field(default="Rosario, Santa Fe")
     cbu_alias: str = Field(default="")
     cbu_number: str = Field(default="")
+    sobre_mi: str = Field(default="")
 
 
 class Usuario(SQLModel, table=True):

@@ -288,6 +288,7 @@ export type ConfigType = {
   address: string
   cbu_alias: string
   cbu_number: string
+  sobre_mi: string
 }
 
 // ── Service Type ──────────────────────────────────────────────────────
@@ -578,4 +579,8 @@ export async function updateTestimonial(id: number, payload: TestimonialUpdate):
 
 export async function deleteTestimonial(id: number): Promise<void> {
   await api.delete(`/testimonials/${id}`)
+}
+
+export async function deleteStorageFile(bucket: string, path: string): Promise<void> {
+  await api.delete(`/storage/delete`, { params: { bucket, path } })
 }

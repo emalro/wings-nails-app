@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import type { GalleryItemRead, GalleryItemCreate, GalleryItemUpdate } from '../../api'
 import { getApiError } from '../../lib/apiErrors'
 import ImageUpload from './ImageUpload'
-import { supabase, supabaseUrl, supabaseAnonKey } from '../../lib/supabase'
+import { deleteStorageFile } from '../../api'
 
 type GallerySlot = {
   orden: number
@@ -201,39 +201,21 @@ export default function GallerySection({
     setGalleryMessage(null)
     clearSlotFeedback(orden)
 
-    // Delete from Supabase Storage if it's a Supabase URL
+    // Delete from Supabase Storage via backend (service_role bypasses RLS)
     const deleteFromStorage = async (): Promise<boolean> => {
-      if (!supabaseUrl || !supabaseAnonKey || !item.image_url.includes('supabase.co/storage')) return true
+      if (!item.image_url.includes('supabase.co/storage')) return true
       try {
         const url = new URL(item.image_url)
         const marker = '/storage/v1/object/'
         const idx = url.pathname.indexOf(marker)
         if (idx === -1) return true
-        // Path after marker: "public/gallery-images/1/1234567890.jpeg"
         const afterMarker = url.pathname.substring(idx + marker.length)
         const segments = afterMarker.split('/')
-        // segments[0] = "public" or "sign", segments[1] = bucket, rest = file path
         if (segments.length < 3) return true
         const bucket = segments[1]
         const filePath = segments.slice(2).join('/')
-        console.log('[GallerySection] Deleting from storage:', { bucket, filePath })
-
-        // Use direct fetch instead of supabase.storage.remove() which drops the path
-        const deleteUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`
-        console.log('[GallerySection] DELETE URL:', deleteUrl)
-        const res = await fetch(deleteUrl, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${supabaseAnonKey}`,
-            'apikey': supabaseAnonKey,
-          },
-        })
-        console.log('[GallerySection] DELETE response:', res.status, res.statusText)
-        if (!res.ok) {
-          const body = await res.text()
-          console.error('[GallerySection] DELETE failed:', body)
-          return false
-        }
+        console.log('[GallerySection] Deleting from storage via backend:', { bucket, filePath })
+        await deleteStorageFile(bucket, filePath)
         return true
       } catch (err) {
         console.error('[GallerySection] Failed to delete from Supabase Storage:', err)
